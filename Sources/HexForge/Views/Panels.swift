@@ -13,7 +13,7 @@ struct FindView: View {
 
             Picker(L.t("Mode"), selection: $state.findMode) {
                 ForEach(FindMode.allCases) { mode in
-                    Text(mode.rawValue).tag(mode)
+                    Text(L.t(mode.rawValue)).tag(mode)
                 }
             }
             .pickerStyle(.segmented)
@@ -21,7 +21,7 @@ struct FindView: View {
             HStack {
                 Text(L.t("Find"))
                     .frame(width: 70, alignment: .leading)
-                TextField(state.findMode == .hex ? "e.g. 4D 5A ?? 00" : "text to search",
+                TextField(state.findMode == .hex ? L.t("e.g. 4D 5A ?? 00") : L.t("text to search"),
                           text: state.findMode == .hex ? $state.findHex : $state.findText)
                     .textFieldStyle(.roundedBorder)
                     .font(.system(.body, design: .monospaced))
@@ -34,7 +34,7 @@ struct FindView: View {
             HStack {
                 Text(L.t("Replace"))
                     .frame(width: 70, alignment: .leading)
-                TextField(state.findMode == .hex ? "hex bytes, same length" : "replacement text, same length",
+                TextField(state.findMode == .hex ? L.t("hex bytes, same length") : L.t("replacement text, same length"),
                           text: $state.replaceWith)
                     .textFieldStyle(.roundedBorder)
                     .font(.system(.body, design: .monospaced))
@@ -97,11 +97,11 @@ struct GotoView: View {
 
     private func go() {
         guard let offset = OffsetParser.parse(text) else {
-            error = "Could not parse offset."
+            error = L.t("Could not parse offset.")
             return
         }
         guard offset < state.size else {
-            error = "Offset beyond end of data (\(state.size) bytes)."
+            error = L.f("Offset beyond end of data (%d bytes).", state.size)
             return
         }
         state.goto(offset: offset)
@@ -167,7 +167,7 @@ struct FillView: View {
 
     private func fill() {
         guard let byte = parseByte(text) else {
-            error = "Enter a hex byte like 00/FF, or a single character."
+            error = L.t("Enter a hex byte like 00/FF, or a single character.")
             return
         }
         state.fillSelection(with: byte)
@@ -222,7 +222,7 @@ struct InsertView: View {
                         text = s
                         error = nil
                     } else {
-                        error = "Clipboard does not contain text."
+                        error = L.t("Clipboard does not contain text.")
                     }
                 }
                 Spacer()
@@ -237,7 +237,7 @@ struct InsertView: View {
 
     private func insert() {
         guard let pattern = BytePattern.parseHex(text), !pattern.bytes.isEmpty else {
-            error = "Enter hex bytes, e.g. DE AD BE EF."
+            error = L.t("Enter hex bytes, e.g. DE AD BE EF.")
             return
         }
         state.insertHex(text)
@@ -282,7 +282,7 @@ struct HashView: View {
             }
 
             if state.hashResults.isEmpty {
-                Text(state.hasContent ? "Run Compute to calculate checksums." : "Open a file first.")
+                Text(state.hasContent ? L.t("Run Compute to calculate checksums.") : L.t("Open a file first."))
                     .font(.caption)
                     .foregroundColor(.secondary)
             } else {
@@ -310,6 +310,6 @@ struct HashView: View {
         let pb = NSPasteboard.general
         pb.clearContents()
         pb.setString(text, forType: .string)
-        state.statusMessage = "Checksums copied"
+        state.statusMessage = L.t("Checksums copied")
     }
 }

@@ -17,7 +17,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // language changes.
         state.$language
             .dropFirst()
-            .sink { [weak self] _ in self?.buildMenu() }
+            .sink { [weak self] language in
+                // `@Published` announces the new value before the property's
+                // `didSet` mirrors it into `L10n`, so set it here as well —
+                // otherwise the rebuilt menu is still rendered in the old
+                // language. Assigning is idempotent.
+                L10n.language = language
+                self?.buildMenu()
+            }
             .store(in: &cancellables)
 
         let root = ContentView().environmentObject(state)
@@ -107,7 +114,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         editMenu.addItem(sysItem(L.t("Paste"), Selector(("paste:")), "v", [.command]))
         editMenu.addItem(sysItem(L.t("Select All"), Selector(("selectAll:")), "a", [.command]))
         editMenu.addItem(.separator())
-        editMenu.addItem(item(L.t("Find…"), #selector(showFind(_:)), "f", [.command]))
+        editMenu.addItem(item(L.t("Search…"), #selector(showSearch(_:)), "f", [.command]))
+        editMenu.addItem(item(L.t("Find & Replace…"), #selector(showFind(_:)), "f", [.command, .option]))
         editMenu.addItem(item(L.t("Goto Offset…"), #selector(showGoto(_:)), "l", [.command]))
         editMenu.addItem(item(L.t("Fill Selection…"), #selector(showFill(_:)), "f", [.command, .shift]))
         editMenu.addItem(.separator())
@@ -190,6 +198,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func undoEdit(_ sender: Any?) { state.undo() }
     @objc private func redoEdit(_ sender: Any?) { state.redo() }
 
+    @objc private func showSearch(_ sender: Any?) { state.openSearch() }
     @objc private func showFind(_ sender: Any?) { state.showFind = true }
     @objc private func showGoto(_ sender: Any?) { state.showGoto = true }
     @objc private func showFill(_ sender: Any?) { state.showFill = true }

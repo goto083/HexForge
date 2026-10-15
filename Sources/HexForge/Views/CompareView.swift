@@ -62,8 +62,8 @@ struct CompareView: View {
             if state.compareDifferences.isEmpty {
                 Spacer()
                 Text(state.compareSummary.isEmpty
-                     ? "Choose a file and press Compare."
-                     : "No differences stored.")
+                     ? L.t("Choose a file and press Compare.")
+                     : L.t("No differences stored."))
                     .font(.callout)
                     .foregroundColor(.secondary)
                     .frame(maxWidth: .infinity)

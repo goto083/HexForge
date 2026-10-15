@@ -56,7 +56,7 @@ enum L10n {
 
     /// Translation tables, one per source-file group, merged into `zh`.
     static let tables: [[String: String]] = [
-        zhApp, zhCore, zhPanels, zhFiles, zhDisk, zhAnalyze, zhServices
+        zhApp, zhCore, zhPanels, zhFiles, zhDisk, zhAnalyze, zhServices, zhSweep
     ]
 
     static let zh: [String: String] = {

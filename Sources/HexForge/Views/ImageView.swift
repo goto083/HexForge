@@ -40,7 +40,7 @@ struct ImageView: View {
                 .foregroundColor(.secondary)
 
             Group {
-                row("Source") {
+                row(L.t("Source")) {
                     TextField(L.t("path, or /dev/rdisk2"), text: $state.imageSource)
                         .textFieldStyle(.roundedBorder)
                         .font(.system(.body, design: .monospaced))
@@ -49,7 +49,7 @@ struct ImageView: View {
                     Button(L.t("Device…")) { state.chooseImageDevice() }.disabled(state.isImaging)
                 }
 
-                row("Destination") {
+                row(L.t("Destination")) {
                     TextField(L.t("folder for the image files"), text: $state.imageDestinationFolder)
                         .textFieldStyle(.roundedBorder)
                         .font(.system(.body, design: .monospaced))
@@ -57,7 +57,7 @@ struct ImageView: View {
                     Button(L.t("Folder…")) { state.chooseImageDestination() }.disabled(state.isImaging)
                 }
 
-                row("Image name") {
+                row(L.t("Image name")) {
                     TextField(L.t("derived from source when empty"), text: $state.imageName)
                         .textFieldStyle(.roundedBorder)
                         .font(.system(.body, design: .monospaced))
@@ -81,7 +81,7 @@ struct ImageView: View {
                     Text(L.t("Split")).frame(width: 40, alignment: .leading)
                     Picker(L.t(""), selection: $state.imageSplitSize) {
                         ForEach(Self.splitChoices) { choice in
-                            Text(choice.id).tag(choice.bytes)
+                            Text(L.t(choice.id)).tag(choice.bytes)
                         }
                     }
                     .labelsHidden()
@@ -204,7 +204,7 @@ struct ImageView: View {
             Spacer()
             Picker(L.t(""), selection: intervalBinding(job)) {
                 ForEach(Self.intervalChoices) { choice in
-                    Text(choice.id).tag(choice.minutes)
+                    Text(L.t(choice.id)).tag(choice.minutes)
                 }
             }
             .labelsHidden()

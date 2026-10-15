@@ -192,6 +192,32 @@ final class AppState: ObservableObject {
     @Published var replaceWith = ""
     @Published var caseSensitive = true
 
+    // Search (WinHex-style find panel)
+    @Published var showSearch = false
+    @Published var searchKind: SearchPatternKind = .hex
+    @Published var searchHex = ""
+    @Published var searchText = ""
+    @Published var searchCaseInsensitive = true
+    @Published var searchWildcardIsOn = false
+    @Published var searchWildcardByte = "3F"
+    @Published var searchDirection: SearchDirection = .forward
+    @Published var searchSelectionOnly = false
+    @Published var searchAlignmentIsOn = false
+    @Published var searchAlignmentModulus = "512"
+    @Published var searchAlignmentRemainder = "0"
+    @Published var searchLimitIsOn = true
+    @Published var searchLimitText = "10000"
+    @Published var searchResults: [SearchHit] = []
+    @Published var searchTotalFound = 0
+    @Published var isSearching = false
+    @Published var searchProgress: Double = 0
+    @Published var searchStatus = ""
+    /// True once a "find next" has wrapped around the end/start of the data.
+    var searchWrapped = false
+    /// Set from the UI thread, read by the background scan.
+    var searchCancelled = false
+    var searchToken = 0
+
     // Hash results
     @Published var hashScopeIsSelection = false
     @Published var hashResults: [HashResult] = []
@@ -509,7 +535,7 @@ final class AppState: ObservableObject {
 
     func paste() {
         guard !document.isReadOnly else { return }
-        guard size > 0 else { statusMessage = "Nothing to paste into — the file is empty."; return }
+        guard size > 0 else { statusMessage = L.t("Nothing to paste into — the file is empty."); return }
         guard let text = NSPasteboard.general.string(forType: .string) else {
             statusMessage = L.t("Clipboard is empty")
             return
@@ -543,7 +569,7 @@ final class AppState: ObservableObject {
     // MARK: - Undo / redo
 
     func undo() {
-        guard document.canUndo else { statusMessage = "Nothing to undo"; return }
+        guard document.canUndo else { statusMessage = L.t("Nothing to undo"); return }
         document.undo()
         clampPositionAfterStructuralEdit()
         statusMessage = L.t("Undo")
@@ -552,7 +578,7 @@ final class AppState: ObservableObject {
     }
 
     func redo() {
-        guard document.canRedo else { statusMessage = "Nothing to redo"; return }
+        guard document.canRedo else { statusMessage = L.t("Nothing to redo"); return }
         document.redo()
         clampPositionAfterStructuralEdit()
         statusMessage = L.t("Redo")
@@ -594,7 +620,7 @@ final class AppState: ObservableObject {
     }
 
     func findNext() {
-        guard let pattern = currentPattern() else { statusMessage = "Invalid search pattern"; return }
+        guard let pattern = currentPattern() else { statusMessage = L.t("Invalid search pattern"); return }
         let start = cursor + 1
         if start < size {
             let hits = Finder.findAll(pattern: pattern, document: document, in: start..<size, limit: 1)
@@ -611,7 +637,7 @@ final class AppState: ObservableObject {
     }
 
     func findPrevious() {
-        guard let pattern = currentPattern() else { statusMessage = "Invalid search pattern"; return }
+        guard let pattern = currentPattern() else { statusMessage = L.t("Invalid search pattern"); return }
         var start = cursor
         if start <= 0 { start = size }
         var hits = Finder.findAll(pattern: pattern, document: document, in: 0..<start)
@@ -630,7 +656,7 @@ final class AppState: ObservableObject {
         }
     }
 
-    private func selectMatch(at offset: Int, length: Int) {
+    func selectMatch(at offset: Int, length: Int) {
         anchor = offset
         cursor = min(offset + max(0, length - 1), max(0, size - 1))
         nibbleHigh = true
@@ -646,7 +672,7 @@ final class AppState: ObservableObject {
             return
         }
         let hits = Finder.findAll(pattern: pattern, document: document, in: 0..<size)
-        guard !hits.isEmpty else { statusMessage = "Not found"; return }
+        guard !hits.isEmpty else { statusMessage = L.t("Not found"); return }
         for hit in hits {
             for (k, byte) in replacement.enumerated() {
                 guard document.contains(offset: hit + k) else { break }
@@ -681,7 +707,7 @@ final class AppState: ObservableObject {
             DispatchQueue.main.async {
                 self?.hashResults = results
                 self?.isHashing = false
-                self?.statusMessage = "Checksums computed"
+                self?.statusMessage = L.t("Checksums computed")
                 self?.bump()
             }
         }
@@ -708,11 +734,10 @@ final class AppState: ObservableObject {
                 guard let self else { return }
                 self.statistics = result
                 self.isComputingStatistics = false
-                let label = self.statisticsScopeIsSelection ? "selection" : "file"
-                self.statisticsStatus = String(
-                    format: "%d byte(s) analysed · %d distinct value(s) · entropy %.3f bits/byte",
-                    result.totalBytes, result.distinctValues, result.entropy)
-                self.statusMessage = "Byte statistics computed for \(label)"
+                let label = self.statisticsScopeIsSelection ? L.t("selection") : L.t("file")
+                self.statisticsStatus = L.f("%d byte(s) analysed · %d distinct value(s) · entropy %.3f bits/byte",
+                                            result.totalBytes, result.distinctValues, result.entropy)
+                self.statusMessage = L.f("Byte statistics computed for %@", label)
                 self.bump()
             }
         }
@@ -746,7 +771,7 @@ final class AppState: ObservableObject {
         panel.canChooseFiles = true
         panel.canChooseDirectories = false
         panel.allowsMultipleSelection = false
-        panel.message = "Choose a file (or navigate to /dev for a raw device)"
+        panel.message = L.t("Choose a file (or navigate to /dev for a raw device)")
         panel.directoryURL = URL(fileURLWithPath: "/")
         guard panel.runModal() == .OK, let url = panel.url else { return }
         document.load(url: url)
@@ -929,7 +954,7 @@ final class AppState: ObservableObject {
         panel.canChooseFiles = true
         panel.canChooseDirectories = false
         panel.allowsMultipleSelection = false
-        panel.message = "Choose a HexForge structure template file (.json)"
+        panel.message = L.t("Choose a HexForge structure template file (.json)")
         guard panel.runModal() == .OK, let url = panel.url else { return }
         do {
             let loaded = try TemplateLoader.load(from: url)
@@ -953,7 +978,7 @@ final class AppState: ObservableObject {
         panel.canChooseFiles = true
         panel.canChooseDirectories = false
         panel.allowsMultipleSelection = false
-        panel.message = "Choose a source file, or navigate to /dev for a raw device"
+        panel.message = L.t("Choose a source file, or navigate to /dev for a raw device")
         panel.directoryURL = document.url?.deletingLastPathComponent() ?? URL(fileURLWithPath: "/")
         if panel.runModal() == .OK, let url = panel.url { cloneSource = url.path }
     }
@@ -965,7 +990,7 @@ final class AppState: ObservableObject {
     func chooseCloneDestination() {
         let panel = NSSavePanel()
         panel.nameFieldStringValue = "clone.img"
-        panel.message = "Choose a destination image file"
+        panel.message = L.t("Choose a destination image file")
         if panel.runModal() == .OK, let url = panel.url { cloneDestination = url.path }
     }
 
@@ -1001,21 +1026,21 @@ final class AppState: ObservableObject {
                             self.cloneProgress = min(1.0, Double(done) / Double(total))
                             self.cloneStatus = "\(self.byteCountString(Int(done))) / \(self.byteCountString(Int(total)))"
                         } else {
-                            self.cloneStatus = "\(self.byteCountString(Int(done))) copied"
+                            self.cloneStatus = L.f("%@ copied", self.byteCountString(Int(done)))
                         }
                     }
                 }
                 DispatchQueue.main.async {
                     self.isCloning = false
                     self.cloneProgress = 1
-                    self.cloneStatus = options.verify ? "Clone written and verified." : "Clone complete."
-                    self.statusMessage = "Clone complete: \(destination)"
+                    self.cloneStatus = options.verify ? L.t("Clone written and verified.") : L.t("Clone complete.")
+                    self.statusMessage = L.f("Clone complete: %@", destination)
                 }
             } catch {
                 DispatchQueue.main.async {
                     self.isCloning = false
                     self.cloneStatus = error.localizedDescription
-                    self.statusMessage = "Clone failed: \(error.localizedDescription)"
+                    self.statusMessage = L.f("Clone failed: %@", error.localizedDescription)
                 }
             }
         }
@@ -1033,7 +1058,7 @@ final class AppState: ObservableObject {
         panel.canChooseFiles = true
         panel.canChooseDirectories = false
         panel.allowsMultipleSelection = false
-        panel.message = "Choose the file to compare with the open document"
+        panel.message = L.t("Choose the file to compare with the open document")
         panel.directoryURL = document.url?.deletingLastPathComponent() ?? URL(fileURLWithPath: "/")
         if panel.runModal() == .OK, let url = panel.url { comparePath = url.path }
     }
@@ -1072,7 +1097,7 @@ final class AppState: ObservableObject {
                     self.compareSummary = result.summaryText(openName: doc.fileName,
                                                              otherName: other.lastPathComponent)
                     self.compareIndex = -1
-                    self.statusMessage = "Compare done · \(result.totalDifferenceRuns) difference run(s)"
+                    self.statusMessage = L.f("Compare done · %d difference run(s)", result.totalDifferenceRuns)
                     if let first = result.differences.first {
                         self.goto(offset: first.offset)
                         // We already jumped to the first run, so the next "Next Diff"
@@ -1086,7 +1111,7 @@ final class AppState: ObservableObject {
                     guard let self else { return }
                     self.isComparing = false
                     self.compareSummary = error.localizedDescription
-                    self.statusMessage = "Compare failed: \(error.localizedDescription)"
+                    self.statusMessage = L.f("Compare failed: %@", error.localizedDescription)
                 }
             }
         }
@@ -1121,8 +1146,8 @@ final class AppState: ObservableObject {
     // MARK: - Encrypt / convert
 
     func applyTransform() {
-        guard size > 0 else { transformStatus = "Open a file first."; return }
-        guard !document.isReadOnly else { transformStatus = "Document is read-only."; return }
+        guard size > 0 else { transformStatus = L.t("Open a file first."); return }
+        guard !document.isReadOnly else { transformStatus = L.t("Document is read-only."); return }
         if transformScopeIsSelection && !hasSelection {
             transformStatus = L.t("Select bytes first, or choose “Whole file”.")
             return
@@ -1162,7 +1187,7 @@ final class AppState: ObservableObject {
         panel.canChooseFiles = true
         panel.canChooseDirectories = false
         panel.allowsMultipleSelection = false
-        panel.message = "Choose a source file, or navigate to /dev for a raw device"
+        panel.message = L.t("Choose a source file, or navigate to /dev for a raw device")
         panel.directoryURL = document.url?.deletingLastPathComponent() ?? URL(fileURLWithPath: "/")
         if panel.runModal() == .OK, let url = panel.url { imageSource = url.path }
     }
@@ -1177,7 +1202,7 @@ final class AppState: ObservableObject {
         panel.canChooseDirectories = true
         panel.canCreateDirectories = true
         panel.allowsMultipleSelection = false
-        panel.message = "Choose a folder for the image files"
+        panel.message = L.t("Choose a folder for the image files")
         if panel.runModal() == .OK, let url = panel.url { imageDestinationFolder = url.path }
     }
 
@@ -1231,7 +1256,7 @@ final class AppState: ObservableObject {
                             self.imageProgress = min(1.0, Double(done) / Double(total))
                             self.imageStatus = "\(self.byteCountString(Int(done))) / \(self.byteCountString(Int(total)))"
                         } else {
-                            self.imageStatus = "\(self.byteCountString(Int(done))) written"
+                            self.imageStatus = L.f("%@ written", self.byteCountString(Int(done)))
                         }
                     }
                 }
@@ -1239,15 +1264,15 @@ final class AppState: ObservableObject {
                     guard let self else { return }
                     self.isImaging = false
                     self.imageProgress = 1
-                    self.imageStatus = "Image complete · \(result.manifest.volumes.count) volume(s) · \(result.manifestURL.lastPathComponent)"
-                    self.statusMessage = "Image written: \(result.manifestURL.path)"
+                    self.imageStatus = L.f("Image complete · %d volume(s) · %@", result.manifest.volumes.count, result.manifestURL.lastPathComponent)
+                    self.statusMessage = L.f("Image written: %@", result.manifestURL.path)
                 }
             } catch {
                 DispatchQueue.main.async {
                     guard let self else { return }
                     self.isImaging = false
                     self.imageStatus = error.localizedDescription
-                    self.statusMessage = "Imaging failed: \(error.localizedDescription)"
+                    self.statusMessage = L.f("Imaging failed: %@", error.localizedDescription)
                 }
             }
         }
@@ -1258,7 +1283,7 @@ final class AppState: ObservableObject {
         panel.canChooseFiles = true
         panel.canChooseDirectories = false
         panel.allowsMultipleSelection = false
-        panel.message = "Choose an image manifest (name.hfmeta.json)"
+        panel.message = L.t("Choose an image manifest (name.hfmeta.json)")
         if !imageDestinationFolder.isEmpty {
             panel.directoryURL = URL(fileURLWithPath: imageDestinationFolder)
         }
@@ -1281,15 +1306,15 @@ final class AppState: ObservableObject {
                     guard let self else { return }
                     self.isImaging = false
                     if !report.hadChecksums {
-                        self.imageVerifyResult = "Manifest has no checksums; \(report.blocksChecked) block(s) read but not compared."
-                        self.statusMessage = "Verify: no checksums recorded"
+                        self.imageVerifyResult = L.f("Manifest has no checksums; %d block(s) read but not compared.", report.blocksChecked)
+                        self.statusMessage = L.t("Verify: no checksums recorded")
                     } else if report.mismatches == 0 {
-                        self.imageVerifyResult = "Verified: \(report.blocksChecked) block(s), all checksums match."
-                        self.statusMessage = "Image verified OK"
+                        self.imageVerifyResult = L.f("Verified: %d block(s), all checksums match.", report.blocksChecked)
+                        self.statusMessage = L.t("Image verified OK")
                     } else {
                         let at = report.firstMismatchOffset.map { "0x" + String($0, radix: 16).uppercased() } ?? "?"
-                        self.imageVerifyResult = "FAILED: \(report.mismatches) mismatch(es), first at \(at)."
-                        self.statusMessage = "Image verification failed"
+                        self.imageVerifyResult = L.f("FAILED: %d mismatch(es), first at %@.", report.mismatches, at)
+                        self.statusMessage = L.t("Image verification failed")
                     }
                 }
             } catch {
@@ -1297,7 +1322,7 @@ final class AppState: ObservableObject {
                     guard let self else { return }
                     self.isImaging = false
                     self.imageVerifyResult = error.localizedDescription
-                    self.statusMessage = "Verify failed: \(error.localizedDescription)"
+                    self.statusMessage = L.f("Verify failed: %@", error.localizedDescription)
                 }
             }
         }
@@ -1434,20 +1459,20 @@ final class AppState: ObservableObject {
     func generateRandomData() {
         guard !isGenerating else { return }
         guard !document.isReadOnly else {
-            randomGenerateStatus = "Document is read-only."
+            randomGenerateStatus = L.t("Document is read-only.")
             return
         }
         let count = parsedByteCount(randomGenerateCountText)
         guard count > 0 else {
-            randomGenerateStatus = "Enter how many bytes to generate."
+            randomGenerateStatus = L.t("Enter how many bytes to generate.")
             return
         }
         guard count <= FileTools.maxGenerateBytes else {
-            randomGenerateStatus = "At most \(byteCountString(FileTools.maxGenerateBytes)) per edit."
+            randomGenerateStatus = L.f("At most %@ per edit.", byteCountString(FileTools.maxGenerateBytes))
             return
         }
         if randomGenerateMode == .replaceSelection && !hasSelection {
-            randomGenerateStatus = "Select bytes first, or choose another mode."
+            randomGenerateStatus = L.t("Select bytes first, or choose another mode.")
             return
         }
 
@@ -1455,7 +1480,7 @@ final class AppState: ObservableObject {
         generateJob = job
         isGenerating = true
         generateProgress = 0
-        randomGenerateStatus = "Generating \(byteCountString(count))…"
+        randomGenerateStatus = L.f("Generating %@…", byteCountString(count))
         statusMessage = L.t("Generating random data…")
 
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
@@ -1476,7 +1501,7 @@ final class AppState: ObservableObject {
                     guard let self else { return }
                     self.isGenerating = false
                     self.randomGenerateStatus = error.localizedDescription
-                    self.statusMessage = "Generate failed: \(error.localizedDescription)"
+                    self.statusMessage = L.f("Generate failed: %@", error.localizedDescription)
                 }
             }
         }
@@ -1484,7 +1509,7 @@ final class AppState: ObservableObject {
 
     func cancelGenerate() {
         generateJob?.cancel()
-        randomGenerateStatus = "Cancelling…"
+        randomGenerateStatus = L.t("Cancelling…")
     }
 
     private func applyGeneratedBytes(_ bytes: [UInt8], mode: RandomGenerateMode) {
@@ -1519,7 +1544,7 @@ final class AppState: ObservableObject {
             placed = bytes.count
         }
         nibbleHigh = true
-        randomGenerateStatus = "Generated \(byteCountString(placed)) of random data."
+        randomGenerateStatus = L.f("Generated %@ of random data.", byteCountString(placed))
         statusMessage = L.f("Generated %@ random byte(s)", byteCountString(placed))
         scrollToken &+= 1
         bump()
@@ -1532,7 +1557,7 @@ final class AppState: ObservableObject {
         panel.canChooseFiles = true
         panel.canChooseDirectories = false
         panel.allowsMultipleSelection = false
-        panel.message = "Choose the file to split"
+        panel.message = L.t("Choose the file to split")
         panel.directoryURL = document.url?.deletingLastPathComponent() ?? URL(fileURLWithPath: "/")
         if panel.runModal() == .OK, let url = panel.url {
             splitSource = url.path
@@ -1546,7 +1571,7 @@ final class AppState: ObservableObject {
         panel.canChooseDirectories = true
         panel.canCreateDirectories = true
         panel.allowsMultipleSelection = false
-        panel.message = "Choose a folder for the parts"
+        panel.message = L.t("Choose a folder for the parts")
         if panel.runModal() == .OK, let url = panel.url { splitFolder = url.path }
     }
 
@@ -1605,17 +1630,17 @@ final class AppState: ObservableObject {
                     guard let self else { return }
                     self.isSplitting = false
                     self.splitProgress = 1
-                    self.splitStatus = "Split into \(parts.count) part(s): "
+                    self.splitStatus = L.f("Split into %d part(s): ", parts.count)
                         + parts.prefix(3).map { $0.url.lastPathComponent }.joined(separator: ", ")
                         + (parts.count > 3 ? "…" : "")
-                    self.statusMessage = "Split complete: \(parts.count) part(s)"
+                    self.statusMessage = L.f("Split complete: %d part(s)", parts.count)
                 }
             } catch {
                 DispatchQueue.main.async {
                     guard let self else { return }
                     self.isSplitting = false
                     self.splitStatus = error.localizedDescription
-                    self.statusMessage = "Split failed: \(error.localizedDescription)"
+                    self.statusMessage = L.f("Split failed: %@", error.localizedDescription)
                 }
             }
         }
@@ -1633,7 +1658,7 @@ final class AppState: ObservableObject {
         panel.canChooseFiles = false
         panel.canChooseDirectories = true
         panel.allowsMultipleSelection = false
-        panel.message = "Choose the folder containing the parts"
+        panel.message = L.t("Choose the folder containing the parts")
         if panel.runModal() == .OK, let url = panel.url {
             joinInputFolder = url.path
             scanJoinFolder()
@@ -1642,7 +1667,7 @@ final class AppState: ObservableObject {
 
     func scanJoinFolder() {
         let folder = joinInputFolder.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !folder.isEmpty else { joinStatus = "Choose a folder of parts."; return }
+        guard !folder.isEmpty else { joinStatus = L.t("Choose a folder of parts."); return }
         let fm = FileManager.default
         guard let items = try? fm.contentsOfDirectory(
             at: URL(fileURLWithPath: folder),
@@ -1664,7 +1689,7 @@ final class AppState: ObservableObject {
         panel.canChooseFiles = true
         panel.canChooseDirectories = false
         panel.allowsMultipleSelection = true
-        panel.message = "Choose the parts to join, in order"
+        panel.message = L.t("Choose the parts to join, in order")
         panel.directoryURL = joinInputFolder.isEmpty ? nil : URL(fileURLWithPath: joinInputFolder)
         if panel.runModal() == .OK {
             joinFilePaths.append(contentsOf: panel.urls.map { $0.path })
@@ -1680,15 +1705,15 @@ final class AppState: ObservableObject {
     func chooseJoinDestination() {
         let panel = NSSavePanel()
         panel.nameFieldStringValue = "joined.bin"
-        panel.message = "Choose the output file"
+        panel.message = L.t("Choose the output file")
         if panel.runModal() == .OK, let url = panel.url { joinDestination = url.path }
     }
 
     func startJoin() {
         guard !isJoining else { return }
         let destination = joinDestination.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !destination.isEmpty else { joinStatus = "Choose a destination file."; return }
-        guard !joinFilePaths.isEmpty else { joinStatus = "Add parts to join first."; return }
+        guard !destination.isEmpty else { joinStatus = L.t("Choose a destination file."); return }
+        guard !joinFilePaths.isEmpty else { joinStatus = L.t("Add parts to join first."); return }
 
         let parts = joinFilePaths.map { URL(fileURLWithPath: $0) }
         let destURL = URL(fileURLWithPath: destination)
@@ -1715,15 +1740,15 @@ final class AppState: ObservableObject {
                     guard let self else { return }
                     self.isJoining = false
                     self.joinProgress = 1
-                    self.joinStatus = "Joined \(parts.count) part(s) → \(self.byteCountString(Int(written)))."
-                    self.statusMessage = "Join complete: \(destURL.lastPathComponent)"
+                    self.joinStatus = L.f("Joined %d part(s) → %@.", parts.count, self.byteCountString(Int(written)))
+                    self.statusMessage = L.f("Join complete: %@", destURL.lastPathComponent)
                 }
             } catch {
                 DispatchQueue.main.async {
                     guard let self else { return }
                     self.isJoining = false
                     self.joinStatus = error.localizedDescription
-                    self.statusMessage = "Join failed: \(error.localizedDescription)"
+                    self.statusMessage = L.f("Join failed: %@", error.localizedDescription)
                 }
             }
         }

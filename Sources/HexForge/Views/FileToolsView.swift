@@ -40,7 +40,7 @@ struct FileToolsView: View {
                 Spacer()
                 Picker(L.t(""), selection: $state.fileToolTab) {
                     ForEach(FileToolTab.allCases) { tab in
-                        Text(tab.rawValue).tag(tab)
+                        Text(L.t(tab.rawValue)).tag(tab)
                     }
                 }
                 .pickerStyle(.segmented)
@@ -82,10 +82,10 @@ struct FileToolsView: View {
                 .font(.caption)
                 .foregroundColor(.secondary)
 
-            row("Mode") {
+            row(L.t("Mode")) {
                 Picker(L.t(""), selection: $state.randomGenerateMode) {
                     ForEach(RandomGenerateMode.allCases) { mode in
-                        Text(mode.rawValue).tag(mode)
+                        Text(L.t(mode.rawValue)).tag(mode)
                     }
                 }
                 .labelsHidden()
@@ -94,7 +94,7 @@ struct FileToolsView: View {
                 Spacer()
             }
 
-            row("Count") {
+            row(L.t("Count")) {
                 TextField(L.t("256, 4k, 1M…"), text: $state.randomGenerateCountText)
                     .textFieldStyle(.roundedBorder)
                     .font(.system(.body, design: .monospaced))
@@ -135,7 +135,7 @@ struct FileToolsView: View {
                 .font(.caption)
                 .foregroundColor(.secondary)
 
-            row("Source") {
+            row(L.t("Source")) {
                 TextField(L.t("source file"), text: $state.splitSource)
                     .textFieldStyle(.roundedBorder)
                     .font(.system(.body, design: .monospaced))
@@ -143,7 +143,7 @@ struct FileToolsView: View {
                 Button(L.t("File…")) { state.chooseSplitSource() }.disabled(state.isSplitting)
             }
 
-            row("Destination") {
+            row(L.t("Destination")) {
                 TextField(L.t("folder for the parts"), text: $state.splitFolder)
                     .textFieldStyle(.roundedBorder)
                     .font(.system(.body, design: .monospaced))
@@ -151,17 +151,17 @@ struct FileToolsView: View {
                 Button(L.t("Folder…")) { state.chooseSplitFolder() }.disabled(state.isSplitting)
             }
 
-            row("Base name") {
+            row(L.t("Base name")) {
                 TextField(L.t("derived from source when empty"), text: $state.splitBaseName)
                     .textFieldStyle(.roundedBorder)
                     .font(.system(.body, design: .monospaced))
                     .disabled(state.isSplitting)
             }
 
-            row("Split by") {
+            row(L.t("Split by")) {
                 Picker(L.t(""), selection: $state.splitMode) {
                     ForEach(FileSplitMode.allCases) { mode in
-                        Text(mode.rawValue).tag(mode)
+                        Text(L.t(mode.rawValue)).tag(mode)
                     }
                 }
                 .labelsHidden()
@@ -171,7 +171,7 @@ struct FileToolsView: View {
                 if state.splitMode == .bySize {
                     Picker(L.t(""), selection: $state.splitPartSize) {
                         ForEach(Self.sizeChoices) { choice in
-                            Text(choice.id).tag(choice.bytes)
+                            Text(L.t(choice.id)).tag(choice.bytes)
                         }
                     }
                     .labelsHidden()
@@ -211,7 +211,7 @@ struct FileToolsView: View {
                 .font(.caption)
                 .foregroundColor(.secondary)
 
-            row("Parts folder") {
+            row(L.t("Parts folder")) {
                 TextField(L.t("folder containing the parts"), text: $state.joinInputFolder)
                     .textFieldStyle(.roundedBorder)
                     .font(.system(.body, design: .monospaced))
@@ -220,7 +220,7 @@ struct FileToolsView: View {
                 Button(L.t("Scan")) { state.scanJoinFolder() }.disabled(state.isJoining)
             }
 
-            row("Parts") {
+            row(L.t("Parts")) {
                 Button(L.t("Add Parts…")) { state.chooseJoinParts() }.disabled(state.isJoining)
                 Button(L.t("Clear")) { state.clearJoinParts() }.disabled(state.isJoining)
                 Spacer()
@@ -229,7 +229,7 @@ struct FileToolsView: View {
                     .foregroundColor(.secondary)
             }
 
-            row("Output") {
+            row(L.t("Output")) {
                 TextField(L.t("output file"), text: $state.joinDestination)
                     .textFieldStyle(.roundedBorder)
                     .font(.system(.body, design: .monospaced))

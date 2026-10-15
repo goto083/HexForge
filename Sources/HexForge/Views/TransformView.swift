@@ -33,7 +33,7 @@ struct TransformView: View {
                 Text(L.t("Operation")).frame(width: 80, alignment: .leading)
                 Picker(L.t(""), selection: $state.transformOperation) {
                     ForEach(TransformOperation.allCases) { op in
-                        Text(op.rawValue).tag(op)
+                        Text(L.t(op.rawValue)).tag(op)
                     }
                 }
                 .labelsHidden()

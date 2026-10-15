@@ -20,6 +20,8 @@ extension L10n {
         "Paste": "粘贴",
         "Select All": "全选",
         "Find…": "查找…",
+        "Search…": "搜索…",
+        "Find & Replace…": "查找与替换…",
         "Goto Offset…": "跳转到偏移…",
         "Fill Selection…": "填充选区…",
         "Insert Bytes…": "插入字节…",

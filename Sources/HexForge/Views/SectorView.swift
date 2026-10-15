@@ -20,7 +20,7 @@ struct SectorView: View {
                     .frame(width: 110, alignment: .leading)
                 Picker(L.t(""), selection: $state.addressMode) {
                     ForEach(AddressMode.allCases) { mode in
-                        Text(mode.rawValue).tag(mode)
+                        Text(L.t(mode.rawValue)).tag(mode)
                     }
                 }
                 .labelsHidden()
@@ -63,12 +63,12 @@ struct SectorView: View {
             Divider()
 
             VStack(alignment: .leading, spacing: 4) {
-                row("Cursor offset", "0x" + hex(state.cursor))
-                row("Sector", "\(state.cursorSector)  ·  start 0x\(hex(state.sectorStart(state.cursorSector)))")
-                row("Offset in sector", "\(state.cursorOffsetInSector)")
-                row("Cluster", "\(state.cursorCluster)  ·  start sector \(state.cursorClusterStartSector)")
-                row("Offset in cluster", "\(state.cursorOffsetInCluster)  ·  sector \(state.cursorSectorWithinCluster) of \(state.sectorsPerCluster)")
-                row("Totals", "\(state.totalSectors) sector(s)  ·  \(state.totalClusters) cluster(s)  ·  cluster size \(state.clusterSize) B")
+                row(L.t("Cursor offset"), "0x" + hex(state.cursor))
+                row(L.t("Sector"), L.f("%d  ·  start 0x%@", state.cursorSector, hex(state.sectorStart(state.cursorSector))))
+                row(L.t("Offset in sector"), "\(state.cursorOffsetInSector)")
+                row(L.t("Cluster"), L.f("%d  ·  start sector %d", state.cursorCluster, state.cursorClusterStartSector))
+                row(L.t("Offset in cluster"), L.f("%d  ·  sector %d of %d", state.cursorOffsetInCluster, state.cursorSectorWithinCluster, state.sectorsPerCluster))
+                row(L.t("Totals"), L.f("%d sector(s)  ·  %d cluster(s)  ·  cluster size %d B", state.totalSectors, state.totalClusters, state.clusterSize))
             }
 
             Divider()
@@ -128,21 +128,21 @@ struct SectorView: View {
 
     private func goSector() {
         guard let index = parseNumber(sectorField), index >= 0 else {
-            state.statusMessage = "Enter a sector number (decimal or 0x…)"
+            state.statusMessage = L.t("Enter a sector number (decimal or 0x…)")
             return
         }
         state.goto(sector: index)
-        state.statusMessage = "Sector \(index)  ·  offset 0x\(hex(state.cursor))"
+        state.statusMessage = L.f("Sector %d  ·  offset 0x%@", index, hex(state.cursor))
         dismiss()
     }
 
     private func goCluster() {
         guard let index = parseNumber(clusterField), index >= 0 else {
-            state.statusMessage = "Enter a cluster number (decimal or 0x…)"
+            state.statusMessage = L.t("Enter a cluster number (decimal or 0x…)")
             return
         }
         state.goto(cluster: index)
-        state.statusMessage = "Cluster \(index)  ·  offset 0x\(hex(state.cursor))"
+        state.statusMessage = L.f("Cluster %d  ·  offset 0x%@", index, hex(state.cursor))
         dismiss()
     }
 }

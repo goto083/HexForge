@@ -43,7 +43,7 @@ struct StatisticsView: View {
             }
 
             if state.statistics.totalBytes == 0 {
-                Text(state.hasContent ? "Run Analyse to build the histogram." : "Open a file first.")
+                Text(state.hasContent ? L.t("Run Analyse to build the histogram.") : L.t("Open a file first."))
                     .font(.caption)
                     .foregroundColor(.secondary)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)

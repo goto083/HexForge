@@ -28,6 +28,7 @@ struct ContentView: View {
         }
         .frame(minWidth: 860, minHeight: 520)
         .sheet(isPresented: $state.showFind) { FindView() }
+        .sheet(isPresented: $state.showSearch) { SearchView() }
         .sheet(isPresented: $state.showGoto) { GotoView() }
         .sheet(isPresented: $state.showFill) { FillView() }
         .sheet(isPresented: $state.showInsert) { InsertView() }
@@ -67,8 +68,12 @@ struct TopBarView: View {
             Button(action: { state.showGoto = true }) {
                 Label(L.t("Goto"), systemImage: "arrow.right.to.line")
             }
+            Button(action: state.openSearch) {
+                Label(L.t("Search"), systemImage: "magnifyingglass")
+            }
+            .help(L.t("Search with wildcards, offset conditions and a result list"))
             Button(action: { state.showFind = true }) {
-                Label(L.t("Find"), systemImage: "magnifyingglass")
+                Label(L.t("Find & Replace"), systemImage: "text.magnifyingglass")
             }
 
             Menu {

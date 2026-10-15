@@ -71,8 +71,8 @@ struct TemplatesView: View {
 
             if fields.isEmpty {
                 Text(state.hasContent
-                     ? "Choose a template and evaluate. Auto-detect parses the recognised format at its header offset."
-                     : "Open a file first.")
+                     ? L.t("Choose a template and evaluate. Auto-detect parses the recognised format at its header offset.")
+                     : L.t("Open a file first."))
                     .font(.caption)
                     .foregroundColor(.secondary)
                     .frame(maxWidth: .infinity, alignment: .center)
