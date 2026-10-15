@@ -122,7 +122,9 @@ final class HexDocument {
         let (index, inner) = locate(offset)
         switch chunks[index] {
         case .original(let base, _):
-            return original.withUnsafeBytes { $0[base + inner] }
+            return original.withUnsafeBytes { (ptr: UnsafeRawBufferPointer) -> UInt8 in
+                ptr[base + inner]
+            }
         case .bytes(let b):
             return b[inner]
         }

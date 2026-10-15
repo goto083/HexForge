@@ -200,7 +200,7 @@ enum CryptoTransform {
         let outCapacity = input.count + kCCBlockSizeAES128
         var out = [UInt8](repeating: 0, count: outCapacity)
         var moved = 0
-        var status: CCCryptorStatus = kCCParamError
+        var status: CCCryptorStatus = CCCryptorStatus(kCCParamError)
 
         key.withUnsafeBytes { keyPtr in
             input.withUnsafeBytes { inPtr in

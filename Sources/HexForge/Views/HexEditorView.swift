@@ -330,5 +330,5 @@ final class HexCanvasView: NSView {
     @objc(cut:) func hexCut(_ sender: Any?) { state?.cut() }
     @objc(copy:) func hexCopy(_ sender: Any?) { state?.copy() }
     @objc(paste:) func hexPaste(_ sender: Any?) { state?.paste() }
-    @objc(selectAll:) func hexSelectAll(_ sender: Any?) { state?.selectAll() }
+    override func selectAll(_ sender: Any?) { state?.selectAll() }
 }
