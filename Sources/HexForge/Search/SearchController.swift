@@ -194,6 +194,11 @@ extension AppState {
 
                 if let first = hits.first {
                     self.selectMatch(at: first, length: pattern.count)
+                    self.selectedHitOffset = first
+                    // WinHex behaviour: with hits listed, the dialog gets out of
+                    // the way and the docked list above the hex view takes over.
+                    self.showSearch = false
+                    self.showHitList = true
                 }
             }
         }
@@ -208,7 +213,18 @@ extension AppState {
     func jumpToSearchHit(_ hit: SearchHit) {
         let length = searchPatternNow()?.count ?? 1
         selectMatch(at: hit.offset, length: length)
+        selectedHitOffset = hit.offset
         setSearchStatus(L.f("Match at 0x%@", String(hit.offset, radix: 16).uppercased()))
+    }
+
+    /// Hex dump of the matched bytes at `hit.offset`, for the hit list rows.
+    /// Reads lazily (only visible rows call this) and caps at 16 bytes.
+    func searchHitPreview(_ hit: SearchHit) -> String {
+        let length = min(searchPatternNow()?.count ?? 0, 16)
+        guard length > 0, hit.offset >= 0, hit.offset + length <= size else { return "" }
+        return document.bytes(in: hit.offset..<(hit.offset + length))
+            .map { String(format: "%02X", $0) }
+            .joined(separator: " ")
     }
 
     private func setSearchStatus(_ text: String) {

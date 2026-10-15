@@ -217,6 +217,10 @@ final class AppState: ObservableObject {
     /// Set from the UI thread, read by the background scan.
     var searchCancelled = false
     var searchToken = 0
+    /// Shows the WinHex-style hit list docked above the hex view.
+    @Published var showHitList = false
+    /// Offset of the hit row the user last clicked, for row highlighting.
+    @Published var selectedHitOffset: Int? = nil
 
     // Hash results
     @Published var hashScopeIsSelection = false
@@ -776,6 +780,7 @@ final class AppState: ObservableObject {
         guard panel.runModal() == .OK, let url = panel.url else { return }
         document.load(url: url)
         clearCompare()
+        clearSearchResults()
         cursor = 0; anchor = 0; nibbleHigh = true
         if let signature = detectFormat() {
             statusMessage = L.f("Opened %@ · %@", url.lastPathComponent, signature.name)
@@ -817,6 +822,7 @@ final class AppState: ObservableObject {
 
         if !opened { document.load(url: nil) }
         clearCompare()
+        clearSearchResults()
         cursor = 0; anchor = 0; nibbleHigh = true
 
         if !opened {
@@ -1141,6 +1147,16 @@ final class AppState: ObservableObject {
         compareTotalRuns = 0
         compareIndex = -1
         isComparing = false
+    }
+
+    /// Drops the search hit list — called when a different document is loaded,
+    /// because stored offsets would point into the wrong data.
+    func clearSearchResults() {
+        searchResults = []
+        searchTotalFound = 0
+        searchStatus = ""
+        showHitList = false
+        selectedHitOffset = nil
     }
 
     // MARK: - Encrypt / convert

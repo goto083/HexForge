@@ -11,6 +11,11 @@ struct ContentView: View {
             VStack(spacing: 0) {
                 TopBarView()
                 Divider()
+                if state.showHitList && !state.searchResults.isEmpty {
+                    SearchResultsView()
+                        .frame(height: 200)
+                    Divider()
+                }
                 HStack(spacing: 0) {
                     HexEditorView()
                         .frame(minWidth: 360, maxWidth: .infinity, maxHeight: .infinity)

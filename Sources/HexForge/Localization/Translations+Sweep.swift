@@ -21,6 +21,8 @@ extension L10n {
         "Search in selection only": "仅在选区内查找",
         "List results (limit)": "列出搜索结果（数量上限）",
         "Results (%d)": "搜索结果（%d）",
+        "Decimal": "十进制",
+        "Matched bytes": "匹配字节",
         "Click a result to jump to it.": "点按结果即可跳转到该位置。",
         "Find All": "查找全部",
         "Stop": "停止",
