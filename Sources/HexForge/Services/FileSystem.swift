@@ -38,12 +38,31 @@ struct FSVolumeInfo {
 struct FSVolume {
     let info: FSVolumeInfo
     let document: HexDocument
+    /// Byte offset of the volume's boot sector: 0 for a bare file system,
+    /// or the partition start when reached through an MBR partition table.
+    let base: Int
 
     // MARK: - Detection
 
+    /// Bare FAT32/exFAT at sector 0, or the first usable MBR partition.
     static func detect(_ document: HexDocument) -> FSVolume? {
+        if let volume = detectVolume(document, base: 0) { return volume }
         guard document.size >= 512 else { return nil }
-        let boot = document.bytes(in: 0..<512)
+        let mbr = document.bytes(in: 0..<512)
+        guard mbr[510] == 0x55, mbr[511] == 0xAA else { return nil }
+        for index in 0..<4 {
+            let e = 0x1BE + index * 16
+            let type = mbr[e + 4]
+            let startLBA = u32(mbr, e + 8)
+            guard type != 0, type != 0xEE, startLBA > 0 else { continue }
+            if let volume = detectVolume(document, base: Int(startLBA) * 512) { return volume }
+        }
+        return nil
+    }
+
+    private static func detectVolume(_ document: HexDocument, base: Int) -> FSVolume? {
+        guard base >= 0, base + 512 <= document.size else { return nil }
+        let boot = document.bytes(in: base..<(base + 512))
 
         // exFAT: OEM name field is "EXFAT   ".
         if String(bytes: boot[3..<11], encoding: .ascii) == "EXFAT   " {
@@ -59,7 +78,7 @@ struct FSVolume {
                 heapStartSector: Int(u32(boot, 0x58)),
                 rootCluster: u32(boot, 0x60))
             guard info.sectorsPerFAT > 0, info.heapStartSector > 0, info.rootCluster >= 2 else { return nil }
-            return FSVolume(info: info, document: document)
+            return FSVolume(info: info, document: document, base: base)
         }
 
         // FAT32: sane BPB + non-zero FAT size + "FAT32   " label at 0x52.
@@ -82,7 +101,7 @@ struct FSVolume {
             fatCount: fats,
             heapStartSector: reserved + fats * fatSz,
             rootCluster: rootClus)
-        return FSVolume(info: info, document: document)
+        return FSVolume(info: info, document: document, base: base)
     }
 
     // MARK: - FAT chain
@@ -90,7 +109,7 @@ struct FSVolume {
     /// Next cluster in the chain, or nil at end-of-chain / on read failure.
     func nextCluster(_ cluster: UInt32) -> UInt32? {
         guard cluster >= 2 else { return nil }
-        let entryOffset = info.fatStartSector * info.bytesPerSector + Int(cluster) * 4
+        let entryOffset = base + info.fatStartSector * info.bytesPerSector + Int(cluster) * 4
         guard entryOffset + 4 <= document.size else { return nil }
         let value = u32(document.bytes(in: entryOffset..<(entryOffset + 4)), 0) & 0x0FFF_FFFF
         if value >= 0x0FFF_FFF8 || value < 2 { return nil }   // EOC / free / bad
@@ -105,7 +124,7 @@ struct FSVolume {
         let cap = (4 << 20) / max(1, info.clusterSize) + 1
         while let c = cluster, visited.count < cap, !visited.contains(c) {
             visited.insert(c)
-            let offset = info.clusterOffset(c)
+            let offset = base + info.clusterOffset(c)
             let end = min(offset + info.clusterSize, document.size)
             guard offset >= 0, offset < end else { break }
             out.append(contentsOf: document.bytes(in: offset..<end))
@@ -240,7 +259,7 @@ struct FSVolume {
 
     private func makeEntry(name: String, isDir: Bool, deleted: Bool,
                            size: UInt64, cluster: UInt32) -> FSEntry {
-        let offset = cluster >= 2 ? info.clusterOffset(cluster) : 0
+        let offset = cluster >= 2 ? base + info.clusterOffset(cluster) : 0
         let reveal = isDir ? info.clusterSize : Int(min(size, UInt64(info.clusterSize)))
         return FSEntry(name: name, isDirectory: isDir, isDeleted: deleted,
                        size: size, firstCluster: cluster,

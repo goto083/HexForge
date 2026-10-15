@@ -7,7 +7,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     let state = AppState()
     private var window: NSWindow!
     private var interpreterPanel: NSPanel?
-    private var fileSystemPanel: NSPanel?
     private var cancellables: Set<AnyCancellable> = []
 
     // MARK: - Lifecycle
@@ -27,18 +26,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 L10n.language = language
                 self?.buildMenu()
                 self?.interpreterPanel?.title = L.t("Data Inspector")
-                self?.fileSystemPanel?.title = L.t("File System")
             }
             .store(in: &cancellables)
 
-        // Floating palettes follow their toggle flags.
+        // The floating data-interpreter palette follows its toggle flag.
+        // (The file system browser is docked in the main window instead.)
         state.$showInspector
             .dropFirst()
             .sink { [weak self] show in self?.setPanelVisible(\.interpreterPanel, show) }
-            .store(in: &cancellables)
-        state.$showFileSystem
-            .dropFirst()
-            .sink { [weak self] show in self?.setPanelVisible(\.fileSystemPanel, show) }
             .store(in: &cancellables)
 
         let root = ContentView().environmentObject(state)
@@ -66,11 +61,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         true
     }
 
-    /// Keeps the toggle flags in sync when a palette's close button is used.
+    /// Keeps the toggle flag in sync when the palette's close button is used.
     func windowWillClose(_ notification: Notification) {
         guard let closing = notification.object as? NSPanel else { return }
         if closing === interpreterPanel { state.showInspector = false }
-        if closing === fileSystemPanel { state.showFileSystem = false }
     }
 
     // MARK: - Menu construction
@@ -212,10 +206,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         }
         guard let panel = self[keyPath: keyPath] else { return }
         if show {
-            if keyPath == \AppDelegate.fileSystemPanel {
-                // Re-detect when the document changed while the panel was away.
-                state.fsBrowser.open(using: state)
-            }
             if !panel.isVisible {
                 if let main = window, main.isVisible {
                     panel.setFrameTopLeftPoint(NSPoint(x: main.frame.maxX - 40, y: main.frame.maxY - 40))
@@ -228,25 +218,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
 
     private func makePanel(for keyPath: ReferenceWritableKeyPath<AppDelegate, NSPanel?>) -> NSPanel {
-        let isInterpreter = keyPath == \AppDelegate.interpreterPanel
-        let size = isInterpreter ? NSSize(width: 300, height: 168) : NSSize(width: 520, height: 360)
         let panel = NSPanel(
-            contentRect: NSRect(origin: .zero, size: size),
+            contentRect: NSRect(origin: .zero, size: NSSize(width: 300, height: 196)),
             styleMask: [.titled, .closable, .resizable, .utilityWindow, .nonactivatingPanel],
             backing: .buffered,
             defer: false
         )
-        panel.title = isInterpreter ? L.t("Data Inspector") : L.t("File System")
+        panel.title = L.t("Data Inspector")
         panel.isFloatingPanel = true
         panel.level = .floating
         panel.isReleasedWhenClosed = false
         panel.hidesOnDeactivate = false
         panel.delegate = self
-        if isInterpreter {
-            panel.contentView = NSHostingView(rootView: InterpreterPanelView().environmentObject(state))
-        } else {
-            panel.contentView = NSHostingView(rootView: FileSystemView(browser: state.fsBrowser).environmentObject(state))
-        }
+        panel.contentView = NSHostingView(rootView: InterpreterPanelView().environmentObject(state))
         return panel
     }
 

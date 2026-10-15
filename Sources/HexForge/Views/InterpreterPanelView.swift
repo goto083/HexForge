@@ -25,6 +25,17 @@ struct InterpreterPanelView: View {
         return Self.grouped.string(from: NSNumber(value: raw)) ?? String(raw)
     }
 
+    /// HFS/HFS+ timestamps: unsigned 32-bit seconds since 1904-01-01 00:00:00 UTC.
+    private var hfsDate: String {
+        let b = buffer
+        guard b.count >= 4 else { return "—" }
+        let raw = state.inspectorBigEndian ? DataInterpreter.be(b, 4) : DataInterpreter.le(b, 4)
+        let date = Date(timeIntervalSince1970: Double(raw) - 2_082_844_800)
+        let df = DateFormatter()
+        df.dateFormat = "yyyy/MM/dd HH:mm:ss"
+        return df.string(from: date)
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             Text(L.f("Offset 0x%@", String(state.cursor, radix: 16).uppercased()))
@@ -39,6 +50,8 @@ struct InterpreterPanelView: View {
             row(L.t("32 Bit Unsigned"), value(4))
             Divider().padding(.leading, 12)
             row(L.t("64 Bit Unsigned"), value(8))
+            Divider().padding(.leading, 12)
+            row(L.t("HFS+ Date (32 Bit)"), hfsDate)
 
             Divider().padding(.vertical, 8)
 

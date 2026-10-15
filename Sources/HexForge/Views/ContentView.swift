@@ -11,6 +11,11 @@ struct ContentView: View {
             VStack(spacing: 0) {
                 TopBarView()
                 Divider()
+                if state.showFileSystem {
+                    FileSystemView(browser: state.fsBrowser)
+                        .frame(height: 220)
+                    Divider()
+                }
                 if state.showHitList && !state.searchResults.isEmpty {
                     SearchResultsView()
                         .frame(height: 200)

@@ -29,6 +29,7 @@ extension L10n {
         "16 Bit Unsigned": "16 位无符号",
         "32 Bit Unsigned": "32 位无符号",
         "64 Bit Unsigned": "64 位无符号",
+        "HFS+ Date (32 Bit)": "HFS+ 日期（32 位）",
         "Endianness": "字节序",
         "Little-endian": "小端",
         "Big-endian": "大端",

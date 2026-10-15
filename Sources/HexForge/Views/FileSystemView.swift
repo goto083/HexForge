@@ -28,7 +28,6 @@ struct FileSystemView: View {
                 Spacer()
             }
         }
-        .frame(minWidth: 460, minHeight: 300)
         .background(Color(nsColor: .windowBackgroundColor))
         .onAppear { browser.open(using: state) }
     }
