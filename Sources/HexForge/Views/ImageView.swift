@@ -176,6 +176,7 @@ struct ImageView: View {
         }
         .padding(20)
         .frame(width: 760, height: 620)
+        .sheet(isPresented: $state.showDiskList) { DiskListView() }
     }
 
     @ViewBuilder

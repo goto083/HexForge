@@ -40,6 +40,7 @@ struct ContentView: View {
         .sheet(isPresented: $state.showTransform) { TransformView() }
         .sheet(isPresented: $state.showStatistics) { StatisticsView() }
         .sheet(isPresented: $state.showFileTools) { FileToolsView() }
+        .sheet(isPresented: $state.showDiskList) { DiskListView() }
     }
 }
 
@@ -56,6 +57,10 @@ struct TopBarView: View {
             Button(action: state.save) {
                 Label(L.t("Save"), systemImage: "square.and.arrow.down")
             }
+            Button(action: { state.presentDiskList(for: .open) }) {
+                Label(L.t("Disks"), systemImage: "externaldrive")
+            }
+            .help(L.t("Open a disk or partition"))
 
             Divider().frame(height: 18)
 

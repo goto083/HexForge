@@ -85,6 +85,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let fileMenu = NSMenu(title: L.t("File"))
         fileItem.submenu = fileMenu
         fileMenu.addItem(item(L.t("Open…"), #selector(openDocument(_:)), "o", [.command]))
+        fileMenu.addItem(item(L.t("Open Disk…"), #selector(showDiskList(_:)), "d", [.command, .shift]))
         fileMenu.addItem(item(L.t("Open Raw Device…"), #selector(openDevice(_:)), "", []))
         fileMenu.addItem(.separator())
         fileMenu.addItem(item(L.t("Save"), #selector(saveDocument(_:)), "s", [.command]))
@@ -181,6 +182,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func openDocument(_ sender: Any?) { state.openFile() }
+    @objc private func showDiskList(_ sender: Any?) { state.presentDiskList(for: .open) }
     @objc private func openDevice(_ sender: Any?) { state.openDevice() }
     @objc private func saveDocument(_ sender: Any?) { state.save() }
     @objc private func saveDocumentAs(_ sender: Any?) { state.saveAs() }

@@ -1,4 +1,5 @@
 import Foundation
+import Darwin
 
 enum DocumentError: LocalizedError {
     case readOnly
@@ -113,6 +114,42 @@ final class HexDocument {
 
     func reload() {
         load(url: url)
+    }
+
+    /// Maps a raw device of a known length, read-only.
+    ///
+    /// `Data(contentsOf:options:)` is unusable here: `stat` reports no size for a
+    /// device node, so mapping fails and Foundation falls back to reading the
+    /// whole thing into memory, which is fatal for a multi-GB disk. Mapping the
+    /// device explicitly keeps memory flat and lets the page cache do the reads.
+    @discardableResult
+    func loadDevice(url: URL, length: Int64) -> Bool {
+        original = Data()
+        chunks.removeAll()
+        chunkStarts.removeAll()
+        undoStack.removeAll()
+        redoStack.removeAll()
+        isDirty = false
+        rebuildIndex()
+
+        let count = Int(length)
+        guard count > 0 else { return false }
+
+        let fd = open(url.path, O_RDONLY)
+        guard fd >= 0 else { return false }
+        defer { close(fd) }
+
+        let mapped = mmap(nil, count, PROT_READ, MAP_PRIVATE, fd, 0)
+        guard let base = mapped, Int(bitPattern: UnsafeRawPointer(base)) != -1 else { return false }
+
+        self.url = url
+        isReadOnly = true
+        original = Data(bytesNoCopy: base, count: count, deallocator: .custom { pointer, size in
+            munmap(pointer, size)
+        })
+        chunks = [.original(offset: 0, count: count)]
+        rebuildIndex()
+        return true
     }
 
     // MARK: - Reading

@@ -84,6 +84,7 @@ struct CloneView: View {
         }
         .padding(20)
         .frame(width: 640, height: 330)
+        .sheet(isPresented: $state.showDiskList) { DiskListView() }
         .onAppear {
             if state.cloneSource.isEmpty, let url = state.document.url {
                 state.cloneSource = url.path

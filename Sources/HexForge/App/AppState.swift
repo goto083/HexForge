@@ -51,6 +51,13 @@ enum FileSplitMode: String, CaseIterable, Identifiable {
     var id: String { rawValue }
 }
 
+/// Which field the disk pick list is filling.
+enum DiskTarget {
+    case open
+    case cloneSource
+    case imageSource
+}
+
 /// A saved imaging/backup job. Persisted in UserDefaults so it survives launches.
 struct BackupJob: Identifiable, Codable, Hashable {
     var id = UUID()
@@ -114,7 +121,12 @@ final class AppState: ObservableObject {
     @Published var showTransform = false
     @Published var showStatistics = false
     @Published var showFileTools = false
+    @Published var showDiskList = false
     @Published var showInspector = true
+
+    // Attached disks, refreshed whenever the pick list opens.
+    @Published var disks: [DiskInfo] = []
+    @Published var diskTarget: DiskTarget = .open
 
     // Detected file format (from magic bytes)
     @Published var detectedFormat: String?
@@ -761,19 +773,126 @@ final class AppState: ObservableObject {
         guard alert.runModal() == .alertFirstButtonReturn else { return }
         let path = field.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !path.isEmpty else { return }
-        document.load(url: URL(fileURLWithPath: path))
+        openDevice(at: path)
+    }
+
+    /// Opens a file or raw device by path. Devices are mapped explicitly so a
+    /// whole disk is never read into memory.
+    func openDevice(at path: String) {
+        let url = URL(fileURLWithPath: path)
+        var opened = false
+
+        if path.hasPrefix("/dev/") {
+            let length = DiskService.deviceSize(ofPath: path)
+            if length > 0 { opened = document.loadDevice(url: url, length: length) }
+        } else {
+            document.load(url: url)
+            opened = document.size > 0
+        }
+
+        if !opened { document.load(url: nil) }
         clearCompare()
-        cursor = 0; anchor = 0
-        let signature = detectFormat()
-        if document.size == 0 {
+        cursor = 0; anchor = 0; nibbleHigh = true
+
+        if !opened {
             statusMessage = L.f("Could not open %@ (permission or unknown size)", path)
-        } else if let signature {
+        } else if let signature = detectFormat() {
             statusMessage = L.f("Opened device %@ · %@", path, signature.name)
         } else {
             statusMessage = L.f("Opened device %@ (%@)", path, byteCountString(document.size))
         }
         scrollToken &+= 1
         bump()
+    }
+
+    // MARK: - Disk list
+
+    /// Opens the pick list for `target`, refreshing the device list first.
+    func presentDiskList(for target: DiskTarget) {
+        diskTarget = target
+        refreshDisks()
+        showDiskList = true
+    }
+
+    func refreshDisks() {
+        disks = DiskService.list()
+        statusMessage = disks.isEmpty ? L.t("No disks found.") : L.f("Found %d disk(s).", disks.count)
+    }
+
+    /// Applies the picked device to whatever asked for it. Returns false when the
+    /// pick could not be used and the sheet should stay open.
+    func applyDiskSelection(_ disk: DiskInfo) -> Bool {
+        switch diskTarget {
+        case .open:
+            guard DiskService.isPrivileged else {
+                promptForAdministratorRights()
+                return false
+            }
+            openDevice(at: disk.rawPath)
+        case .cloneSource:
+            cloneSource = disk.rawPath
+            if !DiskService.isPrivileged { statusMessage = L.t("Raw devices need administrator rights.") }
+        case .imageSource:
+            imageSource = disk.rawPath
+            if !DiskService.isPrivileged { statusMessage = L.t("Raw devices need administrator rights.") }
+        }
+        return true
+    }
+
+    func copyPath(_ path: String) {
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        pasteboard.setString(path, forType: .string)
+        statusMessage = L.f("Copied %@", path)
+    }
+
+    /// macOS only lets root open `/dev/disk*`, so offer to relaunch when a pick
+    /// needs privileges the current process does not have.
+    func promptForAdministratorRights() {
+        let alert = NSAlert()
+        alert.messageText = L.t("Administrator rights required")
+        alert.informativeText = L.t("Reading a raw disk needs administrator rights. Restart HexForge as administrator to continue.")
+        alert.addButton(withTitle: L.t("Restart as Administrator"))
+        alert.addButton(withTitle: L.t("Copy Command"))
+        alert.addButton(withTitle: L.t("Cancel"))
+        switch alert.runModal() {
+        case .alertFirstButtonReturn:
+            restartAsAdministrator()
+        case .alertSecondButtonReturn:
+            let pasteboard = NSPasteboard.general
+            pasteboard.clearContents()
+            pasteboard.setString(administratorCommand, forType: .string)
+            statusMessage = L.t("Administrator command copied to the clipboard.")
+        default:
+            break
+        }
+    }
+
+    var administratorCommand: String {
+        let executable = Bundle.main.executablePath ?? CommandLine.arguments.first ?? ""
+        return "sudo '\(executable)'"
+    }
+
+    /// Relaunches through Terminal, which keeps the new process in the user's
+    /// GUI session while `sudo` gives it root — a privileged helper or
+    /// AppleScript "administrator privileges" would drop the window-server
+    /// connection and the window would never appear.
+    func restartAsAdministrator() {
+        let executable = Bundle.main.executablePath ?? CommandLine.arguments.first ?? ""
+        guard !executable.isEmpty else { return }
+
+        let escaped = administratorCommand
+            .replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "\"", with: "\\\"")
+        let source = "tell application \"Terminal\"\nactivate\ndo script \"\(escaped)\"\nend tell"
+
+        var error: NSDictionary?
+        _ = NSAppleScript(source: source)?.executeAndReturnError(&error)
+        guard error == nil else {
+            statusMessage = L.t("Could not start the administrator session.")
+            return
+        }
+        NSApp.terminate(nil)
     }
 
     func save() {
@@ -840,17 +959,7 @@ final class AppState: ObservableObject {
     }
 
     func chooseCloneDevice() {
-        let alert = NSAlert()
-        alert.messageText = L.t("Choose Source Device")
-        alert.informativeText = L.t("Enter a raw device path, e.g. /dev/rdisk2. Raw (r) devices read faster than buffered ones.")
-        let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 320, height: 24))
-        field.placeholderString = "/dev/rdisk2"
-        alert.accessoryView = field
-        alert.addButton(withTitle: L.t("Use"))
-        alert.addButton(withTitle: L.t("Cancel"))
-        guard alert.runModal() == .alertFirstButtonReturn else { return }
-        let path = field.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !path.isEmpty { cloneSource = path }
+        presentDiskList(for: .cloneSource)
     }
 
     func chooseCloneDestination() {
@@ -1059,17 +1168,7 @@ final class AppState: ObservableObject {
     }
 
     func chooseImageDevice() {
-        let alert = NSAlert()
-        alert.messageText = L.t("Choose Source Device")
-        alert.informativeText = L.t("Enter a raw device path, e.g. /dev/rdisk2. Raw (r) devices read faster than buffered ones.")
-        let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 320, height: 24))
-        field.placeholderString = "/dev/rdisk2"
-        alert.accessoryView = field
-        alert.addButton(withTitle: L.t("Use"))
-        alert.addButton(withTitle: L.t("Cancel"))
-        guard alert.runModal() == .alertFirstButtonReturn else { return }
-        let path = field.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !path.isEmpty { imageSource = path }
+        presentDiskList(for: .imageSource)
     }
 
     func chooseImageDestination() {

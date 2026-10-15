@@ -101,6 +101,30 @@ extension L10n {
         "Generated %@ random byte(s)": "已生成 %@ 随机字节",
         "Splitting %@…": "正在切分 %@…",
         "%d file(s) queued.": "已排队 %d 个文件。",
-        "Joining %d part(s)…": "正在合并 %d 个分片…"
+        "Joining %d part(s)…": "正在合并 %d 个分片…",
+        // Disk list
+        "Open Disk…": "打开磁盘…",
+        "Disks": "磁盘",
+        "Open a disk or partition": "打开磁盘或分区",
+        "Disk List": "磁盘列表",
+        "Refresh": "刷新",
+        "Pick a whole disk or one of its partitions. Raw devices are opened read-only.": "选择整块磁盘或它的某个分区。裸设备以只读方式打开。",
+        "Reading a raw device needs administrator rights.": "读取裸设备需要管理员权限。",
+        "Restart HexForge as administrator to open devices.": "请以管理员身份重启 HexForge 后再打开设备。",
+        "Restart as Administrator": "以管理员身份重启",
+        "Administrator rights required": "需要管理员权限",
+        "Reading a raw disk needs administrator rights. Restart HexForge as administrator to continue.": "读取裸磁盘需要管理员权限，请以管理员身份重启 HexForge 后继续。",
+        "Copy Command": "复制命令",
+        "Administrator command copied to the clipboard.": "管理员命令已复制到剪贴板。",
+        "Could not start the administrator session.": "无法启动管理员会话。",
+        "Raw devices need administrator rights.": "裸设备需要管理员权限。",
+        "No disks found.": "未发现磁盘。",
+        "Found %d disk(s).": "发现 %d 个磁盘。",
+        "Removable": "可移动",
+        "Ejectable": "可弹出",
+        "Partition": "分区",
+        "Path": "路径",
+        "Copy Path": "复制路径",
+        "Copied %@": "已复制 %@"
     ]
 }
