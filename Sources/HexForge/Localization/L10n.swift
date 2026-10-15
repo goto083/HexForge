@@ -65,3 +65,6 @@ enum L10n {
         return merged
     }()
 }
+
+/// Short alias used at every call site: `L.t("File")`, `L.f("Cursor: %d", n)`.
+typealias L = L10n
