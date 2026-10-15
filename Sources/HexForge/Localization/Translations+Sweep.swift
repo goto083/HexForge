@@ -23,6 +23,24 @@ extension L10n {
         "Results (%d)": "搜索结果（%d）",
         "Decimal": "十进制",
         "Matched bytes": "匹配字节",
+
+        // Floating data inspector palette
+        "Data Inspector": "数据解析器",
+        "16 Bit Unsigned": "16 位无符号",
+        "32 Bit Unsigned": "32 位无符号",
+        "64 Bit Unsigned": "64 位无符号",
+        "Endianness": "字节序",
+        "Little-endian": "小端",
+        "Big-endian": "大端",
+        "Offset 0x%@": "偏移 0x%@",
+
+        // File system browser panel
+        "File System": "文件系统",
+        "Parse File System…": "解析文件系统…",
+        "Unsupported or unknown file system.": "不支持或未知的文件系统。",
+        "Deleted": "已删除",
+        "%d bytes/sector": "%d 字节/扇区",
+        "Cluster size %@": "簇大小 %@",
         "Click a result to jump to it.": "点按结果即可跳转到该位置。",
         "Find All": "查找全部",
         "Stop": "停止",

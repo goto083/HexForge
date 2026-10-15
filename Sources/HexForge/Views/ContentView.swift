@@ -19,11 +19,6 @@ struct ContentView: View {
                 HStack(spacing: 0) {
                     HexEditorView()
                         .frame(minWidth: 360, maxWidth: .infinity, maxHeight: .infinity)
-                    if state.showInspector {
-                        Divider()
-                        InspectorView()
-                            .frame(width: 320)
-                    }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 Divider()

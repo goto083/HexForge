@@ -122,7 +122,7 @@ final class AppState: ObservableObject {
     @Published var showStatistics = false
     @Published var showFileTools = false
     @Published var showDiskList = false
-    @Published var showInspector = true
+    @Published var showInspector = false
 
     // Attached disks, refreshed whenever the pick list opens.
     @Published var disks: [DiskInfo] = []
@@ -221,6 +221,16 @@ final class AppState: ObservableObject {
     @Published var showHitList = false
     /// Offset of the hit row the user last clicked, for row highlighting.
     @Published var selectedHitOffset: Int? = nil
+
+    // Data inspector (floating palette) + file system browser
+    /// false = little-endian (Intel), true = big-endian (Motorola).
+    @Published var inspectorBigEndian = false
+    @Published var showFileSystem = false
+    /// Set before bumping `scrollToken` when a jump should centre the target
+    /// row in the viewport instead of barely scrolling it into view.
+    var scrollCentered = false
+    /// Browsing state for the file system panel; reset when a document loads.
+    let fsBrowser = FileSystemBrowser()
 
     // Hash results
     @Published var hashScopeIsSelection = false
@@ -781,6 +791,8 @@ final class AppState: ObservableObject {
         document.load(url: url)
         clearCompare()
         clearSearchResults()
+        fsBrowser.reset()
+        if showFileSystem { fsBrowser.open(using: self) }
         cursor = 0; anchor = 0; nibbleHigh = true
         if let signature = detectFormat() {
             statusMessage = L.f("Opened %@ · %@", url.lastPathComponent, signature.name)
@@ -823,6 +835,8 @@ final class AppState: ObservableObject {
         if !opened { document.load(url: nil) }
         clearCompare()
         clearSearchResults()
+        fsBrowser.reset()
+        if showFileSystem { fsBrowser.open(using: self) }
         cursor = 0; anchor = 0; nibbleHigh = true
 
         if !opened {

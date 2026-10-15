@@ -124,6 +124,16 @@ final class HexCanvasView: NSView {
     func scrollToCursor() {
         guard let state else { return }
         let row = state.cursor / bytesPerRow
+        if state.scrollCentered {
+            // Jumps from the hit list / file system panel centre the target row
+            // in the viewport so the surrounding bytes are readable.
+            state.scrollCentered = false
+            let viewportHeight = enclosingScrollView?.contentView.bounds.height ?? bounds.height
+            var y = CGFloat(row) * rowHeight - (viewportHeight - rowHeight) / 2
+            y = max(0, min(y, bounds.height - viewportHeight))
+            scroll(NSPoint(x: 0, y: y))
+            return
+        }
         // Full-width rect keeps the caret vertically visible without resetting the
         // horizontal scroll position.
         let rect = NSRect(x: 0, y: CGFloat(row) * rowHeight,

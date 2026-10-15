@@ -212,6 +212,7 @@ extension AppState {
 
     func jumpToSearchHit(_ hit: SearchHit) {
         let length = searchPatternNow()?.count ?? 1
+        scrollCentered = true
         selectMatch(at: hit.offset, length: length)
         selectedHitOffset = hit.offset
         setSearchStatus(L.f("Match at 0x%@", String(hit.offset, radix: 16).uppercased()))

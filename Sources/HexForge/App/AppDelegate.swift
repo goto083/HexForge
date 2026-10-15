@@ -2,10 +2,12 @@ import AppKit
 import Combine
 import SwiftUI
 
-final class AppDelegate: NSObject, NSApplicationDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
     let state = AppState()
     private var window: NSWindow!
+    private var interpreterPanel: NSPanel?
+    private var fileSystemPanel: NSPanel?
     private var cancellables: Set<AnyCancellable> = []
 
     // MARK: - Lifecycle
@@ -24,7 +26,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 // language. Assigning is idempotent.
                 L10n.language = language
                 self?.buildMenu()
+                self?.interpreterPanel?.title = L.t("Data Inspector")
+                self?.fileSystemPanel?.title = L.t("File System")
             }
+            .store(in: &cancellables)
+
+        // Floating palettes follow their toggle flags.
+        state.$showInspector
+            .dropFirst()
+            .sink { [weak self] show in self?.setPanelVisible(\.interpreterPanel, show) }
+            .store(in: &cancellables)
+        state.$showFileSystem
+            .dropFirst()
+            .sink { [weak self] show in self?.setPanelVisible(\.fileSystemPanel, show) }
             .store(in: &cancellables)
 
         let root = ContentView().environmentObject(state)
@@ -50,6 +64,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         true
+    }
+
+    /// Keeps the toggle flags in sync when a palette's close button is used.
+    func windowWillClose(_ notification: Notification) {
+        guard let closing = notification.object as? NSPanel else { return }
+        if closing === interpreterPanel { state.showInspector = false }
+        if closing === fileSystemPanel { state.showFileSystem = false }
     }
 
     // MARK: - Menu construction
@@ -132,6 +153,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         toolsMenu.addItem(item(L.t("Load Template File…"), #selector(loadTemplateFile(_:)), "", []))
         toolsMenu.addItem(item(L.t("Disk Clone…"), #selector(showClone(_:)), "c", [.command, .option]))
         toolsMenu.addItem(item(L.t("Sector / Cluster View…"), #selector(showSectorView(_:)), "", []))
+        toolsMenu.addItem(item(L.t("Parse File System…"), #selector(showFileSystemPanel(_:)), "p", [.command, .option]))
         toolsMenu.addItem(item(L.t("Compare With File…"), #selector(showCompare(_:)), "e", [.command, .option]))
         toolsMenu.addItem(item(L.t("Disk Image & Backup…"), #selector(showImage(_:)), "m", [.command, .option]))
         toolsMenu.addItem(item(L.t("Encrypt / Convert…"), #selector(showTransform(_:)), "y", [.command, .option]))
@@ -181,6 +203,53 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return it
     }
 
+    // MARK: - Floating panels
+
+    /// Shows/hides one of the floating palettes, creating it on first use.
+    private func setPanelVisible(_ keyPath: ReferenceWritableKeyPath<AppDelegate, NSPanel?>, _ show: Bool) {
+        if self[keyPath: keyPath] == nil {
+            self[keyPath: keyPath] = makePanel(for: keyPath)
+        }
+        guard let panel = self[keyPath: keyPath] else { return }
+        if show {
+            if keyPath == \AppDelegate.fileSystemPanel {
+                // Re-detect when the document changed while the panel was away.
+                state.fsBrowser.open(using: state)
+            }
+            if !panel.isVisible {
+                if let main = window, main.isVisible {
+                    panel.setFrameTopLeftPoint(NSPoint(x: main.frame.maxX - 40, y: main.frame.maxY - 40))
+                }
+                panel.orderFront(nil)
+            }
+        } else {
+            panel.orderOut(nil)
+        }
+    }
+
+    private func makePanel(for keyPath: ReferenceWritableKeyPath<AppDelegate, NSPanel?>) -> NSPanel {
+        let isInterpreter = keyPath == \AppDelegate.interpreterPanel
+        let size = isInterpreter ? NSSize(width: 300, height: 168) : NSSize(width: 520, height: 360)
+        let panel = NSPanel(
+            contentRect: NSRect(origin: .zero, size: size),
+            styleMask: [.titled, .closable, .resizable, .utilityWindow, .nonactivatingPanel],
+            backing: .buffered,
+            defer: false
+        )
+        panel.title = isInterpreter ? L.t("Data Inspector") : L.t("File System")
+        panel.isFloatingPanel = true
+        panel.level = .floating
+        panel.isReleasedWhenClosed = false
+        panel.hidesOnDeactivate = false
+        panel.delegate = self
+        if isInterpreter {
+            panel.contentView = NSHostingView(rootView: InterpreterPanelView().environmentObject(state))
+        } else {
+            panel.contentView = NSHostingView(rootView: FileSystemView(browser: state.fsBrowser).environmentObject(state))
+        }
+        return panel
+    }
+
     // MARK: - Actions
 
     @objc private func changeLanguage(_ sender: NSMenuItem) {
@@ -209,6 +278,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func loadTemplateFile(_ sender: Any?) { state.loadTemplates() }
     @objc private func showClone(_ sender: Any?) { state.showClone = true }
     @objc private func showSectorView(_ sender: Any?) { state.showSector = true }
+    @objc private func showFileSystemPanel(_ sender: Any?) { state.showFileSystem.toggle() }
     @objc private func showCompare(_ sender: Any?) { state.showCompare = true }
     @objc private func showImage(_ sender: Any?) { state.showImage = true }
     @objc private func showTransform(_ sender: Any?) { state.showTransform = true }
