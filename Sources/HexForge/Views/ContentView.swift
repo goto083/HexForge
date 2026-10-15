@@ -121,21 +121,21 @@ struct StatusBarView: View {
     var body: some View {
         HStack(spacing: 16) {
             Text("Offset: 0x\(String(state.cursor, radix: 16).uppercased())")
-                .monospaced()
+                .font(.system(.body, design: .monospaced))
             Text("Cursor: \(state.cursor)")
-                .monospaced()
+                .font(.system(.body, design: .monospaced))
             if state.addressMode != .fileOffset {
                 Text("Sector: \(state.cursorSector)  ·  Cluster: \(state.cursorCluster)")
-                    .monospaced()
+                    .font(.system(.body, design: .monospaced))
             }
             if state.hasSelection {
                 Text("Sel: \(state.selectionLength) byte(s)")
-                    .monospaced()
+                    .font(.system(.body, design: .monospaced))
             }
             Text("Size: \(state.byteCountString(state.size)) (\(state.size) bytes)")
-                .monospaced()
+                .font(.system(.body, design: .monospaced))
             Text("Pane: \(state.activePane == .hex ? "Hex" : "ASCII")")
-                .monospaced()
+                .font(.system(.body, design: .monospaced))
             if state.isReadOnly {
                 Text("READ-ONLY").foregroundColor(.orange).bold()
             }

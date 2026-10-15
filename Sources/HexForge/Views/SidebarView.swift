@@ -55,7 +55,7 @@ struct SidebarView: View {
                         } label: {
                             HStack {
                                 Image(systemName: "bookmark.fill").foregroundColor(.accentColor)
-                                Text(bookmark.name).monospaced()
+                                Text(bookmark.name).font(.system(.body, design: .monospaced))
                                 Spacer()
                                 Text("\(bookmark.offset)")
                                     .font(.caption)
@@ -82,7 +82,7 @@ struct SidebarView: View {
                 .foregroundColor(.secondary)
                 .frame(width: 52, alignment: .leading)
             Text(value)
-                .monospaced()
+                .font(.system(.body, design: .monospaced))
                 .lineLimit(1)
                 .truncationMode(.middle)
         }
