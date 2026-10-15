@@ -4,7 +4,7 @@ import PackageDescription
 let package = Package(
     name: "HexForge",
     platforms: [
-        .macOS(.v13)
+        .macOS(.v12)
     ],
     targets: [
         .executableTarget(
