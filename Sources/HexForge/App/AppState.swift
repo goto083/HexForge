@@ -80,6 +80,14 @@ final class AppState: ObservableObject {
     // custom hex view redraws, even for edits that don't touch a @Published field.
     @Published private(set) var revision = 0
 
+    /// UI language, mirrored into `L10n` so every string lookup follows it.
+    @Published var language: AppLanguage = L10n.savedLanguage() {
+        didSet {
+            L10n.language = language
+            L10n.persist(language)
+        }
+    }
+
     // Editor position
     @Published var cursor = 0
     @Published var anchor = 0
@@ -227,6 +235,8 @@ final class AppState: ObservableObject {
 
     init(document: HexDocument = HexDocument()) {
         self.document = document
+        L10n.language = language
+        statusMessage = L.t("Ready")
         backupJobs = Self.loadBackupJobs()
         startBackupTimer()
     }
@@ -283,7 +293,7 @@ final class AppState: ObservableObject {
         guard size > 0 else { return }
         anchor = 0
         cursor = size - 1
-        statusMessage = "Selected \(size) bytes"
+        statusMessage = L.f("Selected %d bytes", size)
         bump()
     }
 
@@ -393,7 +403,7 @@ final class AppState: ObservableObject {
         cursor = newCursor
         anchor = newCursor
         nibbleHigh = true
-        statusMessage = "Deleted \(range.count) byte(s)"
+        statusMessage = L.f("Deleted %d byte(s)", range.count)
         bump()
     }
 
@@ -405,7 +415,7 @@ final class AppState: ObservableObject {
         anchor = position
         cursor = min(position + bytes.count - 1, max(0, size - 1))
         nibbleHigh = true
-        statusMessage = "Inserted \(bytes.count) byte(s)"
+        statusMessage = L.f("Inserted %d byte(s)", bytes.count)
         scrollToken &+= 1
         bump()
     }
@@ -414,7 +424,7 @@ final class AppState: ObservableObject {
     func insertHex(_ text: String) {
         guard !document.isReadOnly else { return }
         guard let pattern = BytePattern.parseHex(text), !pattern.bytes.isEmpty else {
-            statusMessage = "Enter hex bytes to insert (e.g. DE AD BE EF)"
+            statusMessage = L.t("Enter hex bytes to insert (e.g. DE AD BE EF)")
             return
         }
         insertBytes(pattern.bytes.map { $0 ?? 0x00 })
@@ -423,7 +433,7 @@ final class AppState: ObservableObject {
     func insertFromClipboard() {
         guard !document.isReadOnly else { return }
         guard let text = NSPasteboard.general.string(forType: .string) else {
-            statusMessage = "Clipboard is empty"
+            statusMessage = L.t("Clipboard is empty")
             return
         }
         insertHex(text)
@@ -453,7 +463,7 @@ final class AppState: ObservableObject {
         guard size > 0, !document.isReadOnly else { return }
         let range = hasSelection ? selectionRange : cursor..<(cursor + 1)
         document.overwrite(repeating: value, range: range)
-        statusMessage = "Filled \(range.count) byte(s) with 0x" + String(format: "%02X", value)
+        statusMessage = L.f("Filled %d byte(s) with 0x%@", range.count, String(format: "%02X", value))
         bump()
     }
 
@@ -474,7 +484,7 @@ final class AppState: ObservableObject {
         let pb = NSPasteboard.general
         pb.clearContents()
         pb.setString(string, forType: .string)
-        statusMessage = "Copied \(bytes.count) byte(s)"
+        statusMessage = L.f("Copied %d byte(s)", bytes.count)
     }
 
     func cut() {
@@ -482,14 +492,14 @@ final class AppState: ObservableObject {
         let count = selectionLength
         copy()
         deleteSelection()
-        statusMessage = "Cut \(count) byte(s)"
+        statusMessage = L.f("Cut %d byte(s)", count)
     }
 
     func paste() {
         guard !document.isReadOnly else { return }
         guard size > 0 else { statusMessage = "Nothing to paste into — the file is empty."; return }
         guard let text = NSPasteboard.general.string(forType: .string) else {
-            statusMessage = "Clipboard is empty"
+            statusMessage = L.t("Clipboard is empty")
             return
         }
         let bytes: [UInt8]
@@ -498,7 +508,7 @@ final class AppState: ObservableObject {
         } else if let pattern = BytePattern.parseHex(text.isEmpty ? "" : text) {
             bytes = pattern.bytes.map { $0 ?? 0x00 }
         } else {
-            statusMessage = "Clipboard is not valid hex"
+            statusMessage = L.t("Clipboard is not valid hex")
             return
         }
         var offset = cursor
@@ -514,7 +524,7 @@ final class AppState: ObservableObject {
             cursor = min(cursor + written - 1, max(0, size - 1))
             nibbleHigh = true
         }
-        statusMessage = "Pasted \(written) byte(s)"
+        statusMessage = L.f("Pasted %d byte(s)", written)
         bump()
     }
 
@@ -524,7 +534,7 @@ final class AppState: ObservableObject {
         guard document.canUndo else { statusMessage = "Nothing to undo"; return }
         document.undo()
         clampPositionAfterStructuralEdit()
-        statusMessage = "Undo"
+        statusMessage = L.t("Undo")
         scrollToken &+= 1
         bump()
     }
@@ -533,7 +543,7 @@ final class AppState: ObservableObject {
         guard document.canRedo else { statusMessage = "Nothing to redo"; return }
         document.redo()
         clampPositionAfterStructuralEdit()
-        statusMessage = "Redo"
+        statusMessage = L.t("Redo")
         scrollToken &+= 1
         bump()
     }
@@ -582,9 +592,9 @@ final class AppState: ObservableObject {
         let all = Finder.findAll(pattern: pattern, document: document, in: 0..<size, limit: 1)
         if let hit = all.first {
             selectMatch(at: hit, length: pattern.count)
-            statusMessage = "Match at 0x\(String(hit, radix: 16).uppercased()) (wrapped)"
+            statusMessage = L.f("Match at 0x%@ (wrapped)", String(hit, radix: 16).uppercased())
         } else {
-            statusMessage = "Not found"
+            statusMessage = L.t("Not found")
         }
     }
 
@@ -597,9 +607,9 @@ final class AppState: ObservableObject {
             hits = Finder.findAll(pattern: pattern, document: document, in: 0..<size)
             if let hit = hits.last {
                 selectMatch(at: hit, length: pattern.count)
-                statusMessage = "Match at 0x\(String(hit, radix: 16).uppercased()) (wrapped)"
+                statusMessage = L.f("Match at 0x%@ (wrapped)", String(hit, radix: 16).uppercased())
             } else {
-                statusMessage = "Not found"
+                statusMessage = L.t("Not found")
             }
             return
         }
@@ -612,7 +622,7 @@ final class AppState: ObservableObject {
         anchor = offset
         cursor = min(offset + max(0, length - 1), max(0, size - 1))
         nibbleHigh = true
-        statusMessage = "Match at 0x\(String(offset, radix: 16).uppercased())"
+        statusMessage = L.f("Match at 0x%@", String(offset, radix: 16).uppercased())
         scrollToken &+= 1
         bump()
     }
@@ -620,7 +630,7 @@ final class AppState: ObservableObject {
     func replaceAll() {
         guard size > 0, !document.isReadOnly else { return }
         guard let (pattern, replacement) = patternForReplace() else {
-            statusMessage = "Invalid pattern or replacement length mismatch"
+            statusMessage = L.t("Invalid pattern or replacement length mismatch")
             return
         }
         let hits = Finder.findAll(pattern: pattern, document: document, in: 0..<size)
@@ -631,7 +641,7 @@ final class AppState: ObservableObject {
                 document.setByte(byte, at: hit + k)
             }
         }
-        statusMessage = "Replaced \(hits.count) occurrence(s)"
+        statusMessage = L.f("Replaced %d occurrence(s)", hits.count)
         bump()
     }
 
@@ -642,7 +652,7 @@ final class AppState: ObservableObject {
         let range = (overSelection && hasSelection) ? selectionRange : 0..<size
         hashScopeIsSelection = overSelection && hasSelection
         isHashing = true
-        statusMessage = "Computing checksums…"
+        statusMessage = L.t("Computing checksums…")
 
         let doc = document
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
@@ -672,8 +682,8 @@ final class AppState: ObservableObject {
         let range = (overSelection && hasSelection) ? selectionRange : 0..<size
         statisticsScopeIsSelection = overSelection && hasSelection
         isComputingStatistics = true
-        statisticsStatus = "Computing…"
-        statusMessage = "Analysing byte frequencies…"
+        statisticsStatus = L.t("Computing…")
+        statusMessage = L.t("Analysing byte frequencies…")
 
         let doc = document
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
@@ -702,7 +712,7 @@ final class AppState: ObservableObject {
         let name = "0x" + String(cursor, radix: 16).uppercased()
         bookmarks.append(Bookmark(offset: cursor, name: name))
         bookmarks.sort { $0.offset < $1.offset }
-        statusMessage = "Bookmark added at \(name)"
+        statusMessage = L.f("Bookmark added at %@", name)
     }
 
     // MARK: - Format detection
@@ -731,9 +741,9 @@ final class AppState: ObservableObject {
         clearCompare()
         cursor = 0; anchor = 0; nibbleHigh = true
         if let signature = detectFormat() {
-            statusMessage = "Opened \(url.lastPathComponent) · \(signature.name)"
+            statusMessage = L.f("Opened %@ · %@", url.lastPathComponent, signature.name)
         } else {
-            statusMessage = "Opened \(url.lastPathComponent) (\(byteCountString(document.size)))"
+            statusMessage = L.f("Opened %@ (%@)", url.lastPathComponent, byteCountString(document.size))
         }
         scrollToken &+= 1
         bump()
@@ -741,13 +751,13 @@ final class AppState: ObservableObject {
 
     func openDevice() {
         let alert = NSAlert()
-        alert.messageText = "Open Raw Device"
-        alert.informativeText = "Enter an absolute device path, e.g. /dev/disk2 or /dev/rdisk2. Devices are opened read-only."
+        alert.messageText = L.t("Open Raw Device")
+        alert.informativeText = L.t("Enter an absolute device path, e.g. /dev/disk2 or /dev/rdisk2. Devices are opened read-only.")
         let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 320, height: 24))
         field.placeholderString = "/dev/rdisk2"
         alert.accessoryView = field
-        alert.addButton(withTitle: "Open")
-        alert.addButton(withTitle: "Cancel")
+        alert.addButton(withTitle: L.t("Open"))
+        alert.addButton(withTitle: L.t("Cancel"))
         guard alert.runModal() == .alertFirstButtonReturn else { return }
         let path = field.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !path.isEmpty else { return }
@@ -756,11 +766,11 @@ final class AppState: ObservableObject {
         cursor = 0; anchor = 0
         let signature = detectFormat()
         if document.size == 0 {
-            statusMessage = "Could not open \(path) (permission or unknown size)"
+            statusMessage = L.f("Could not open %@ (permission or unknown size)", path)
         } else if let signature {
-            statusMessage = "Opened device \(path) · \(signature.name)"
+            statusMessage = L.f("Opened device %@ · %@", path, signature.name)
         } else {
-            statusMessage = "Opened device \(path) (\(byteCountString(document.size)))"
+            statusMessage = L.f("Opened device %@ (%@)", path, byteCountString(document.size))
         }
         scrollToken &+= 1
         bump()
@@ -770,9 +780,9 @@ final class AppState: ObservableObject {
         guard let url = document.url else { saveAs(); return }
         do {
             try document.save(to: url)
-            statusMessage = "Saved \(url.lastPathComponent)"
+            statusMessage = L.f("Saved %@", url.lastPathComponent)
         } catch {
-            statusMessage = "Save failed: \(error.localizedDescription)"
+            statusMessage = L.f("Save failed: %@", error.localizedDescription)
         }
         bump()
     }
@@ -783,9 +793,9 @@ final class AppState: ObservableObject {
         guard panel.runModal() == .OK, let url = panel.url else { return }
         do {
             try document.save(to: url)
-            statusMessage = "Saved \(url.lastPathComponent)"
+            statusMessage = L.f("Saved %@", url.lastPathComponent)
         } catch {
-            statusMessage = "Save failed: \(error.localizedDescription)"
+            statusMessage = L.f("Save failed: %@", error.localizedDescription)
         }
         bump()
     }
@@ -805,16 +815,16 @@ final class AppState: ObservableObject {
         do {
             let loaded = try TemplateLoader.load(from: url)
             customTemplates.append(contentsOf: loaded)
-            statusMessage = "Loaded \(loaded.count) template(s) from \(url.lastPathComponent)"
+            statusMessage = L.f("Loaded %d template(s) from %@", loaded.count, url.lastPathComponent)
         } catch {
-            statusMessage = "Template load failed: \(error.localizedDescription)"
+            statusMessage = L.f("Template load failed: %@", error.localizedDescription)
         }
     }
 
     func clearCustomTemplates() {
         guard !customTemplates.isEmpty else { return }
         customTemplates.removeAll()
-        statusMessage = "Removed external templates"
+        statusMessage = L.t("Removed external templates")
     }
 
     // MARK: - Disk clone
@@ -831,13 +841,13 @@ final class AppState: ObservableObject {
 
     func chooseCloneDevice() {
         let alert = NSAlert()
-        alert.messageText = "Choose Source Device"
-        alert.informativeText = "Enter a raw device path, e.g. /dev/rdisk2. Raw (r) devices read faster than buffered ones."
+        alert.messageText = L.t("Choose Source Device")
+        alert.informativeText = L.t("Enter a raw device path, e.g. /dev/rdisk2. Raw (r) devices read faster than buffered ones.")
         let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 320, height: 24))
         field.placeholderString = "/dev/rdisk2"
         alert.accessoryView = field
-        alert.addButton(withTitle: "Use")
-        alert.addButton(withTitle: "Cancel")
+        alert.addButton(withTitle: L.t("Use"))
+        alert.addButton(withTitle: L.t("Cancel"))
         guard alert.runModal() == .alertFirstButtonReturn else { return }
         let path = field.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
         if !path.isEmpty { cloneSource = path }
@@ -855,7 +865,7 @@ final class AppState: ObservableObject {
         let source = cloneSource.trimmingCharacters(in: .whitespacesAndNewlines)
         let destination = cloneDestination.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !source.isEmpty, !destination.isEmpty else {
-            cloneStatus = "Enter both a source and a destination."
+            cloneStatus = L.t("Enter both a source and a destination.")
             return
         }
 
@@ -868,8 +878,8 @@ final class AppState: ObservableObject {
         isCloning = true
         cloneProgress = 0
         cloneTotalBytes = DiskCloner.size(of: URL(fileURLWithPath: source))
-        cloneStatus = "Cloning…"
-        statusMessage = "Cloning \(source)"
+        cloneStatus = L.t("Cloning…")
+        statusMessage = L.f("Cloning %@", source)
 
         DispatchQueue.global(qos: .userInitiated).async {
             do {
@@ -904,7 +914,7 @@ final class AppState: ObservableObject {
 
     func cancelClone() {
         cloner?.cancel()
-        cloneStatus = "Cancelling…"
+        cloneStatus = L.t("Cancelling…")
     }
 
     // MARK: - File compare
@@ -923,19 +933,19 @@ final class AppState: ObservableObject {
         guard !isComparing else { return }
         let path = comparePath.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !path.isEmpty else {
-            compareSummary = "Choose a file to compare against."
+            compareSummary = L.t("Choose a file to compare against.")
             return
         }
         guard document.size > 0 else {
-            compareSummary = "Open a file first."
+            compareSummary = L.t("Open a file first.")
             return
         }
         let other = URL(fileURLWithPath: path)
         let doc = document
         isComparing = true
         comparerCancelled = false
-        compareSummary = "Comparing…"
-        statusMessage = "Comparing \(fileName) with \(other.lastPathComponent)…"
+        compareSummary = L.t("Comparing…")
+        statusMessage = L.f("Comparing %@ with %@…", fileName, other.lastPathComponent)
 
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             do {
@@ -975,7 +985,7 @@ final class AppState: ObservableObject {
 
     func cancelCompare() {
         comparerCancelled = true
-        compareSummary = "Cancelling…"
+        compareSummary = L.t("Cancelling…")
     }
 
     func gotoNextDifference() {
@@ -1005,7 +1015,7 @@ final class AppState: ObservableObject {
         guard size > 0 else { transformStatus = "Open a file first."; return }
         guard !document.isReadOnly else { transformStatus = "Document is read-only."; return }
         if transformScopeIsSelection && !hasSelection {
-            transformStatus = "Select bytes first, or choose “Whole file”."
+            transformStatus = L.t("Select bytes first, or choose “Whole file”.")
             return
         }
         let range = (transformScopeIsSelection && hasSelection) ? selectionRange : 0..<size
@@ -1032,7 +1042,7 @@ final class AppState: ObservableObject {
             bump()
         } catch {
             transformStatus = error.localizedDescription
-            statusMessage = "Transform failed: \(error.localizedDescription)"
+            statusMessage = L.f("Transform failed: %@", error.localizedDescription)
         }
     }
 
@@ -1050,13 +1060,13 @@ final class AppState: ObservableObject {
 
     func chooseImageDevice() {
         let alert = NSAlert()
-        alert.messageText = "Choose Source Device"
-        alert.informativeText = "Enter a raw device path, e.g. /dev/rdisk2. Raw (r) devices read faster than buffered ones."
+        alert.messageText = L.t("Choose Source Device")
+        alert.informativeText = L.t("Enter a raw device path, e.g. /dev/rdisk2. Raw (r) devices read faster than buffered ones.")
         let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 320, height: 24))
         field.placeholderString = "/dev/rdisk2"
         alert.accessoryView = field
-        alert.addButton(withTitle: "Use")
-        alert.addButton(withTitle: "Cancel")
+        alert.addButton(withTitle: L.t("Use"))
+        alert.addButton(withTitle: L.t("Cancel"))
         guard alert.runModal() == .alertFirstButtonReturn else { return }
         let path = field.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
         if !path.isEmpty { imageSource = path }
@@ -1077,7 +1087,7 @@ final class AppState: ObservableObject {
         let source = imageSource.trimmingCharacters(in: .whitespacesAndNewlines)
         let folder = imageDestinationFolder.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !source.isEmpty, !folder.isEmpty else {
-            imageStatus = "Choose both a source and a destination folder."
+            imageStatus = L.t("Choose both a source and a destination folder.")
             return
         }
         var options = DiskImager.Options()
@@ -1094,7 +1104,7 @@ final class AppState: ObservableObject {
 
     func cancelImage() {
         imagerJob?.cancel()
-        imageStatus = "Cancelling…"
+        imageStatus = L.t("Cancelling…")
     }
 
     private func runImageJob(source: URL, folder: URL, name: String, options: DiskImager.Options) {
@@ -1105,8 +1115,8 @@ final class AppState: ObservableObject {
         imageProgress = 0
         imageVerifyResult = ""
         imageTotalBytes = DiskCloner.size(of: source)
-        imageStatus = "Imaging…"
-        statusMessage = "Imaging \(source.lastPathComponent)"
+        imageStatus = L.t("Imaging…")
+        statusMessage = L.f("Imaging %@", source.lastPathComponent)
 
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             do {
@@ -1162,8 +1172,8 @@ final class AppState: ObservableObject {
         let job = DiskImager.Job()
         imagerJob = job
         isImaging = true
-        imageVerifyResult = "Verifying…"
-        statusMessage = "Verifying \(manifestURL.lastPathComponent)…"
+        imageVerifyResult = L.t("Verifying…")
+        statusMessage = L.f("Verifying %@…", manifestURL.lastPathComponent)
 
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             do {
@@ -1200,7 +1210,7 @@ final class AppState: ObservableObject {
         let source = imageSource.trimmingCharacters(in: .whitespacesAndNewlines)
         let folder = imageDestinationFolder.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !source.isEmpty, !folder.isEmpty else {
-            imageStatus = "Set a source and destination folder before saving a backup job."
+            imageStatus = L.t("Set a source and destination folder before saving a backup job.")
             return
         }
         let job = BackupJob(name: imageName.isEmpty ? (source as NSString).lastPathComponent : imageName,
@@ -1216,13 +1226,13 @@ final class AppState: ObservableObject {
                             lastRun: nil)
         backupJobs.append(job)
         saveBackupJobs()
-        statusMessage = "Backup job saved: \(job.name)"
+        statusMessage = L.f("Backup job saved: %@", job.name)
     }
 
     func removeBackupJob(_ job: BackupJob) {
         backupJobs.removeAll { $0.id == job.id }
         saveBackupJobs()
-        statusMessage = "Backup job removed"
+        statusMessage = L.t("Backup job removed")
     }
 
     func updateBackupJob(_ job: BackupJob) {
@@ -1347,7 +1357,7 @@ final class AppState: ObservableObject {
         isGenerating = true
         generateProgress = 0
         randomGenerateStatus = "Generating \(byteCountString(count))…"
-        statusMessage = "Generating random data…"
+        statusMessage = L.t("Generating random data…")
 
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             do {
@@ -1411,7 +1421,7 @@ final class AppState: ObservableObject {
         }
         nibbleHigh = true
         randomGenerateStatus = "Generated \(byteCountString(placed)) of random data."
-        statusMessage = "Generated \(byteCountString(placed)) random byte(s)"
+        statusMessage = L.f("Generated %@ random byte(s)", byteCountString(placed))
         scrollToken &+= 1
         bump()
     }
@@ -1446,14 +1456,14 @@ final class AppState: ObservableObject {
         let source = splitSource.trimmingCharacters(in: .whitespacesAndNewlines)
         let folder = splitFolder.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !source.isEmpty, !folder.isEmpty else {
-            splitStatus = "Choose a source file and a destination folder."
+            splitStatus = L.t("Choose a source file and a destination folder.")
             return
         }
         let sourceURL = URL(fileURLWithPath: source)
         let folderURL = URL(fileURLWithPath: folder)
         let total = DiskCloner.size(of: sourceURL)
         guard total > 0 else {
-            splitStatus = "The source is empty or unreadable."
+            splitStatus = L.t("The source is empty or unreadable.")
             return
         }
 
@@ -1464,7 +1474,7 @@ final class AppState: ObservableObject {
         case .byCount:
             let count = Int(splitPartCountText.trimmingCharacters(in: .whitespacesAndNewlines)) ?? 0
             guard count >= 1 else {
-                splitStatus = "Enter a part count of at least 1."
+                splitStatus = L.t("Enter a part count of at least 1.")
                 return
             }
             partSize = (total + Int64(count) - 1) / Int64(count)
@@ -1476,8 +1486,8 @@ final class AppState: ObservableObject {
         isSplitting = true
         splitProgress = 0
         splitTotalBytes = total
-        splitStatus = "Splitting…"
-        statusMessage = "Splitting \(sourceURL.lastPathComponent)…"
+        splitStatus = L.t("Splitting…")
+        statusMessage = L.f("Splitting %@…", sourceURL.lastPathComponent)
 
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             do {
@@ -1514,7 +1524,7 @@ final class AppState: ObservableObject {
 
     func cancelSplit() {
         splitJob?.cancel()
-        splitStatus = "Cancelling…"
+        splitStatus = L.t("Cancelling…")
     }
 
     // MARK: Join
@@ -1540,14 +1550,14 @@ final class AppState: ObservableObject {
             includingPropertiesForKeys: [.isRegularFileKey],
             options: [.skipsHiddenFiles]
         ) else {
-            joinStatus = "Cannot read the folder."
+            joinStatus = L.t("Cannot read the folder.")
             return
         }
         joinFilePaths = items
             .filter { (try? $0.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) ?? false }
             .map { $0.path }
             .sorted { ($0 as NSString).lastPathComponent < ($1 as NSString).lastPathComponent }
-        joinStatus = joinFilePaths.isEmpty ? "No files found in the folder." : "\(joinFilePaths.count) file(s) queued."
+        joinStatus = joinFilePaths.isEmpty ? L.t("No files found in the folder.") : L.f("%d file(s) queued.", joinFilePaths.count)
     }
 
     func chooseJoinParts() {
@@ -1559,7 +1569,7 @@ final class AppState: ObservableObject {
         panel.directoryURL = joinInputFolder.isEmpty ? nil : URL(fileURLWithPath: joinInputFolder)
         if panel.runModal() == .OK {
             joinFilePaths.append(contentsOf: panel.urls.map { $0.path })
-            joinStatus = "\(joinFilePaths.count) file(s) queued."
+            joinStatus = L.f("%d file(s) queued.", joinFilePaths.count)
         }
     }
 
@@ -1588,8 +1598,8 @@ final class AppState: ObservableObject {
         isJoining = true
         joinProgress = 0
         joinTotalBytes = parts.reduce(Int64(0)) { $0 + DiskCloner.size(of: $1) }
-        joinStatus = "Joining…"
-        statusMessage = "Joining \(parts.count) part(s)…"
+        joinStatus = L.t("Joining…")
+        statusMessage = L.f("Joining %d part(s)…", parts.count)
 
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             do {
@@ -1622,7 +1632,7 @@ final class AppState: ObservableObject {
 
     func cancelJoin() {
         joinJob?.cancel()
-        joinStatus = "Cancelling…"
+        joinStatus = L.t("Cancelling…")
     }
 
     // MARK: - Helpers

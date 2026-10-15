@@ -51,60 +51,60 @@ struct TopBarView: View {
     var body: some View {
         HStack(spacing: 10) {
             Button(action: state.openFile) {
-                Label("Open", systemImage: "folder")
+                Label(L.t("Open"), systemImage: "folder")
             }
             Button(action: state.save) {
-                Label("Save", systemImage: "square.and.arrow.down")
+                Label(L.t("Save"), systemImage: "square.and.arrow.down")
             }
 
             Divider().frame(height: 18)
 
             Button(action: { state.showGoto = true }) {
-                Label("Goto", systemImage: "arrow.right.to.line")
+                Label(L.t("Goto"), systemImage: "arrow.right.to.line")
             }
             Button(action: { state.showFind = true }) {
-                Label("Find", systemImage: "magnifyingglass")
+                Label(L.t("Find"), systemImage: "magnifyingglass")
             }
 
             Menu {
-                Button("Compute Hash / Checksum…") { state.showHash = true }
-                Button("Structure Templates…") { state.showTemplates = true }
-                Button("Load Template File…") { state.loadTemplates() }
+                Button(L.t("Compute Hash / Checksum…")) { state.showHash = true }
+                Button(L.t("Structure Templates…")) { state.showTemplates = true }
+                Button(L.t("Load Template File…")) { state.loadTemplates() }
                 Divider()
-                Button("Disk Clone…") { state.showClone = true }
-                Button("Disk Image & Backup…") { state.showImage = true }
-                Button("Compare With File…") { state.showCompare = true }
-                Button("Sector / Cluster View…") { state.showSector = true }
+                Button(L.t("Disk Clone…")) { state.showClone = true }
+                Button(L.t("Disk Image & Backup…")) { state.showImage = true }
+                Button(L.t("Compare With File…")) { state.showCompare = true }
+                Button(L.t("Sector / Cluster View…")) { state.showSector = true }
                 Divider()
-                Button("Encrypt / Convert…") { state.showTransform = true }
-                Button("Byte Statistics…") { state.showStatistics = true }
-                Button("File Tools…") { state.showFileTools = true }
+                Button(L.t("Encrypt / Convert…")) { state.showTransform = true }
+                Button(L.t("Byte Statistics…")) { state.showStatistics = true }
+                Button(L.t("File Tools…")) { state.showFileTools = true }
             } label: {
-                Label("Tools", systemImage: "wrench.and.screwdriver")
+                Label(L.t("Tools"), systemImage: "wrench.and.screwdriver")
             }
             .menuStyle(.borderlessButton)
             .fixedSize()
 
             Divider().frame(height: 18)
 
-            Picker("Cols", selection: $state.bytesPerRow) {
-                Text("8").tag(8)
-                Text("16").tag(16)
-                Text("24").tag(24)
-                Text("32").tag(32)
+            Picker(L.t("Cols"), selection: $state.bytesPerRow) {
+                Text(L.t("8")).tag(8)
+                Text(L.t("16")).tag(16)
+                Text(L.t("24")).tag(24)
+                Text(L.t("32")).tag(32)
             }
             .pickerStyle(.segmented)
             .frame(width: 180)
-            .help("Bytes per row")
+            .help(L.t("Bytes per row"))
 
-            Toggle("ASCII", isOn: $state.showAscii)
+            Toggle(L.t("ASCII"), isOn: $state.showAscii)
                 .toggleStyle(.switch)
 
             Toggle(isOn: $state.showInspector) {
                 Image(systemName: "sidebar.right")
             }
             .toggleStyle(.button)
-            .help("Toggle data inspector")
+            .help(L.t("Toggle data inspector"))
 
             Spacer()
         }
@@ -120,27 +120,27 @@ struct StatusBarView: View {
 
     var body: some View {
         HStack(spacing: 16) {
-            Text("Offset: 0x\(String(state.cursor, radix: 16).uppercased())")
+            Text(L.f("Offset: 0x%@", String(state.cursor, radix: 16).uppercased()))
                 .font(.system(.body, design: .monospaced))
-            Text("Cursor: \(state.cursor)")
+            Text(L.f("Cursor: %d", state.cursor))
                 .font(.system(.body, design: .monospaced))
             if state.addressMode != .fileOffset {
-                Text("Sector: \(state.cursorSector)  ·  Cluster: \(state.cursorCluster)")
+                Text(L.f("Sector: %d  ·  Cluster: %d", state.cursorSector, state.cursorCluster))
                     .font(.system(.body, design: .monospaced))
             }
             if state.hasSelection {
-                Text("Sel: \(state.selectionLength) byte(s)")
+                Text(L.f("Sel: %d byte(s)", state.selectionLength))
                     .font(.system(.body, design: .monospaced))
             }
-            Text("Size: \(state.byteCountString(state.size)) (\(state.size) bytes)")
+            Text(L.f("Size: %@ (%d bytes)", state.byteCountString(state.size), state.size))
                 .font(.system(.body, design: .monospaced))
-            Text("Pane: \(state.activePane == .hex ? "Hex" : "ASCII")")
+            Text(L.f("Pane: %@", L.t(state.activePane == .hex ? "Hex" : "ASCII")))
                 .font(.system(.body, design: .monospaced))
             if state.isReadOnly {
-                Text("READ-ONLY").foregroundColor(.orange).bold()
+                Text(L.t("READ-ONLY")).foregroundColor(.orange).bold()
             }
             if state.isDirty {
-                Text("MODIFIED").foregroundColor(.red).bold()
+                Text(L.t("MODIFIED")).foregroundColor(.red).bold()
             }
             Spacer()
             Text(state.statusMessage)

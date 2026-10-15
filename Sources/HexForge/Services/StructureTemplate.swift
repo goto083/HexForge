@@ -399,8 +399,8 @@ enum TemplateLoadError: LocalizedError {
 
     var errorDescription: String? {
         switch self {
-        case .unreadable(let message): return "Cannot read template file: \(message)"
-        case .invalid(let message):    return "Invalid template file: \(message)"
+        case .unreadable(let message): return L.f("Cannot read template file: %@", message)
+        case .invalid(let message):    return L.f("Invalid template file: %@", message)
         }
     }
 }
@@ -434,11 +434,11 @@ enum TemplateLoader {
         } else if let object = root as? [String: Any] {
             objects = (object["templates"] as? [[String: Any]]) ?? [object]
         } else {
-            throw TemplateLoadError.invalid("expected a template object or an array of templates")
+            throw TemplateLoadError.invalid(L.t("expected a template object or an array of templates"))
         }
 
         let templates = try objects.map { try template(from: $0) }
-        guard !templates.isEmpty else { throw TemplateLoadError.invalid("no templates found") }
+        guard !templates.isEmpty else { throw TemplateLoadError.invalid(L.t("no templates found")) }
         return templates
     }
 
@@ -447,7 +447,7 @@ enum TemplateLoader {
             throw TemplateLoadError.invalid("a template is missing \"name\"")
         }
         guard let rawFields = object["fields"] as? [[String: Any]], !rawFields.isEmpty else {
-            throw TemplateLoadError.invalid("template \"\(name)\" has no \"fields\"")
+            throw TemplateLoadError.invalid(L.f("template \"%@\" has no \"fields\"", name))
         }
         let fields = try rawFields.map { try field(from: $0, template: name) }
         return StructureTemplate(name: name, fields: fields)
@@ -455,16 +455,16 @@ enum TemplateLoader {
 
     private static func field(from object: [String: Any], template: String) throws -> TemplateField {
         guard let name = object["name"] as? String else {
-            throw TemplateLoadError.invalid("template \"\(template)\": a field is missing \"name\"")
+            throw TemplateLoadError.invalid(L.f("template \"%@\": a field is missing \"name\"", template))
         }
         guard let offset = integer(object["offset"]) else {
-            throw TemplateLoadError.invalid("field \"\(name)\": missing or invalid \"offset\"")
+            throw TemplateLoadError.invalid(L.f("field \"%@\": missing or invalid \"offset\"", name))
         }
         guard let token = object["kind"] as? String else {
-            throw TemplateLoadError.invalid("field \"\(name)\": missing \"kind\"")
+            throw TemplateLoadError.invalid(L.f("field \"%@\": missing \"kind\"", name))
         }
         guard let kind = TemplateField.FieldKind(token: token, size: integer(object["size"])) else {
-            throw TemplateLoadError.invalid("field \"\(name)\": unknown kind \"\(token)\"")
+            throw TemplateLoadError.invalid(L.f("field \"%@\": unknown kind \"%@\"", name, token))
         }
         return TemplateField(name: name, offset: offset, kind: kind)
     }

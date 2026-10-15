@@ -55,7 +55,7 @@ enum FileComparer {
 
         func summaryText(openName: String, otherName: String) -> String {
             let sizeB = bSize > 0 ? "\(bSize)" : "?"
-            var text = "\(openName) vs \(otherName)  ·  \(totalDifferenceRuns) difference run(s)  ·  \(aSize) / \(sizeB) bytes"
+            var text = L.f("%@ vs %@  ·  %d difference run(s)  ·  %@ / %@ bytes", openName, otherName, totalDifferenceRuns, aSize, sizeB)
             if truncated { text += "  ·  list truncated" }
             return text
         }
@@ -67,8 +67,8 @@ enum FileComparer {
 
         var errorDescription: String? {
             switch self {
-            case .unreadable(let path): return "Cannot read \(path)"
-            case .cancelled:            return "Comparison cancelled."
+            case .unreadable(let path): return L.f("Cannot read %@", path)
+            case .cancelled:            return L.t("Comparison cancelled.")
             }
         }
     }

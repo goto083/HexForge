@@ -10,15 +10,15 @@ struct SectorView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack {
-                Text("Sector / Cluster View").font(.headline)
+                Text(L.t("Sector / Cluster View")).font(.headline)
                 Spacer()
-                Button("Close") { dismiss() }.keyboardShortcut(.cancelAction)
+                Button(L.t("Close")) { dismiss() }.keyboardShortcut(.cancelAction)
             }
 
             HStack {
-                Text("Address column")
+                Text(L.t("Address column"))
                     .frame(width: 110, alignment: .leading)
-                Picker("", selection: $state.addressMode) {
+                Picker(L.t(""), selection: $state.addressMode) {
                     ForEach(AddressMode.allCases) { mode in
                         Text(mode.rawValue).tag(mode)
                     }
@@ -30,29 +30,29 @@ struct SectorView: View {
 
             HStack(spacing: 20) {
                 HStack {
-                    Text("Sector size")
+                    Text(L.t("Sector size"))
                         .frame(width: 80, alignment: .leading)
-                    Picker("", selection: $state.sectorSize) {
-                        Text("512").tag(512)
-                        Text("1024").tag(1024)
-                        Text("2048").tag(2048)
-                        Text("4096").tag(4096)
+                    Picker(L.t(""), selection: $state.sectorSize) {
+                        Text(L.t("512")).tag(512)
+                        Text(L.t("1024")).tag(1024)
+                        Text(L.t("2048")).tag(2048)
+                        Text(L.t("4096")).tag(4096)
                     }
                     .labelsHidden()
                     .frame(width: 100)
                 }
                 HStack {
-                    Text("Sectors / cluster")
+                    Text(L.t("Sectors / cluster"))
                         .frame(width: 120, alignment: .leading)
-                    Picker("", selection: $state.sectorsPerCluster) {
-                        Text("1").tag(1)
-                        Text("2").tag(2)
-                        Text("4").tag(4)
-                        Text("8").tag(8)
-                        Text("16").tag(16)
-                        Text("32").tag(32)
-                        Text("64").tag(64)
-                        Text("128").tag(128)
+                    Picker(L.t(""), selection: $state.sectorsPerCluster) {
+                        Text(L.t("1")).tag(1)
+                        Text(L.t("2")).tag(2)
+                        Text(L.t("4")).tag(4)
+                        Text(L.t("8")).tag(8)
+                        Text(L.t("16")).tag(16)
+                        Text(L.t("32")).tag(32)
+                        Text(L.t("64")).tag(64)
+                        Text(L.t("128")).tag(128)
                     }
                     .labelsHidden()
                     .frame(width: 100)
@@ -74,24 +74,24 @@ struct SectorView: View {
             Divider()
 
             HStack {
-                Text("Goto sector")
+                Text(L.t("Goto sector"))
                     .frame(width: 110, alignment: .leading)
-                TextField("decimal or 0x…", text: $sectorField)
+                TextField(L.t("decimal or 0x…"), text: $sectorField)
                     .textFieldStyle(.roundedBorder)
                     .frame(width: 160)
                     .onSubmit(goSector)
-                Button("Go", action: goSector)
+                Button(L.t("Go"), action: goSector)
                 Spacer()
             }
 
             HStack {
-                Text("Goto cluster")
+                Text(L.t("Goto cluster"))
                     .frame(width: 110, alignment: .leading)
-                TextField("decimal or 0x…", text: $clusterField)
+                TextField(L.t("decimal or 0x…"), text: $clusterField)
                     .textFieldStyle(.roundedBorder)
                     .frame(width: 160)
                     .onSubmit(goCluster)
-                Button("Go", action: goCluster)
+                Button(L.t("Go"), action: goCluster)
                 Spacer()
             }
 

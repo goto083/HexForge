@@ -1,15 +1,24 @@
 import AppKit
+import Combine
 import SwiftUI
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
 
     let state = AppState()
     private var window: NSWindow!
+    private var cancellables: Set<AnyCancellable> = []
 
     // MARK: - Lifecycle
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         buildMenu()
+
+        // Menu titles are AppKit strings, so they need a rebuild whenever the
+        // language changes.
+        state.$language
+            .dropFirst()
+            .sink { [weak self] _ in self?.buildMenu() }
+            .store(in: &cancellables)
 
         let root = ContentView().environmentObject(state)
         window = NSWindow(
@@ -46,81 +55,97 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         mainMenu.addItem(appItem)
         let appMenu = NSMenu()
         appItem.submenu = appMenu
-        appMenu.addItem(sysItem("About HexForge", #selector(NSApplication.orderFrontStandardAboutPanel(_:)), "", []))
+        appMenu.addItem(sysItem(L.t("About HexForge"), #selector(NSApplication.orderFrontStandardAboutPanel(_:)), "", []))
         appMenu.addItem(.separator())
-        appMenu.addItem(sysItem("Hide HexForge", #selector(NSApplication.hide(_:)), "h", [.command]))
-        appMenu.addItem(sysItem("Hide Others", #selector(NSApplication.hideOtherApplications(_:)), "h", [.command, .option]))
-        appMenu.addItem(sysItem("Show All", #selector(NSApplication.unhideAllApplications(_:)), "", []))
+
+        // Language submenu — titles stay in their own script so the choice is
+        // readable no matter which language is active.
+        let languageItem = NSMenuItem(title: L.t("Language"), action: nil, keyEquivalent: "")
+        let languageMenu = NSMenu(title: L.t("Language"))
+        for language in AppLanguage.allCases {
+            let entry = NSMenuItem(title: language.endonym, action: #selector(changeLanguage(_:)), keyEquivalent: "")
+            entry.target = self
+            entry.representedObject = language.rawValue
+            entry.state = (state.language == language) ? .on : .off
+            languageMenu.addItem(entry)
+        }
+        languageItem.submenu = languageMenu
+        appMenu.addItem(languageItem)
         appMenu.addItem(.separator())
-        appMenu.addItem(sysItem("Quit HexForge", #selector(NSApplication.terminate(_:)), "q", [.command]))
+
+        appMenu.addItem(sysItem(L.t("Hide HexForge"), #selector(NSApplication.hide(_:)), "h", [.command]))
+        appMenu.addItem(sysItem(L.t("Hide Others"), #selector(NSApplication.hideOtherApplications(_:)), "h", [.command, .option]))
+        appMenu.addItem(sysItem(L.t("Show All"), #selector(NSApplication.unhideAllApplications(_:)), "", []))
+        appMenu.addItem(.separator())
+        appMenu.addItem(sysItem(L.t("Quit HexForge"), #selector(NSApplication.terminate(_:)), "q", [.command]))
 
         // File
         let fileItem = NSMenuItem()
         mainMenu.addItem(fileItem)
-        let fileMenu = NSMenu(title: "File")
+        let fileMenu = NSMenu(title: L.t("File"))
         fileItem.submenu = fileMenu
-        fileMenu.addItem(item("Open…", #selector(openDocument(_:)), "o", [.command]))
-        fileMenu.addItem(item("Open Raw Device…", #selector(openDevice(_:)), "", []))
+        fileMenu.addItem(item(L.t("Open…"), #selector(openDocument(_:)), "o", [.command]))
+        fileMenu.addItem(item(L.t("Open Raw Device…"), #selector(openDevice(_:)), "", []))
         fileMenu.addItem(.separator())
-        fileMenu.addItem(item("Save", #selector(saveDocument(_:)), "s", [.command]))
-        fileMenu.addItem(item("Save As…", #selector(saveDocumentAs(_:)), "s", [.command, .shift]))
+        fileMenu.addItem(item(L.t("Save"), #selector(saveDocument(_:)), "s", [.command]))
+        fileMenu.addItem(item(L.t("Save As…"), #selector(saveDocumentAs(_:)), "s", [.command, .shift]))
         fileMenu.addItem(.separator())
-        fileMenu.addItem(sysItem("Close Window", #selector(NSWindow.performClose(_:)), "w", [.command]))
+        fileMenu.addItem(sysItem(L.t("Close Window"), #selector(NSWindow.performClose(_:)), "w", [.command]))
 
         // Edit
         let editItem = NSMenuItem()
         mainMenu.addItem(editItem)
-        let editMenu = NSMenu(title: "Edit")
+        let editMenu = NSMenu(title: L.t("Edit"))
         editItem.submenu = editMenu
-        editMenu.addItem(item("Undo byte edit", #selector(undoEdit(_:)), "z", [.command]))
-        editMenu.addItem(item("Redo byte edit", #selector(redoEdit(_:)), "z", [.command, .shift]))
+        editMenu.addItem(item(L.t("Undo byte edit"), #selector(undoEdit(_:)), "z", [.command]))
+        editMenu.addItem(item(L.t("Redo byte edit"), #selector(redoEdit(_:)), "z", [.command, .shift]))
         editMenu.addItem(.separator())
         // Standard selectors so text fields in the sheets keep working.
-        editMenu.addItem(sysItem("Cut", Selector(("cut:")), "x", [.command]))
-        editMenu.addItem(sysItem("Copy", Selector(("copy:")), "c", [.command]))
-        editMenu.addItem(sysItem("Paste", Selector(("paste:")), "v", [.command]))
-        editMenu.addItem(sysItem("Select All", Selector(("selectAll:")), "a", [.command]))
+        editMenu.addItem(sysItem(L.t("Cut"), Selector(("cut:")), "x", [.command]))
+        editMenu.addItem(sysItem(L.t("Copy"), Selector(("copy:")), "c", [.command]))
+        editMenu.addItem(sysItem(L.t("Paste"), Selector(("paste:")), "v", [.command]))
+        editMenu.addItem(sysItem(L.t("Select All"), Selector(("selectAll:")), "a", [.command]))
         editMenu.addItem(.separator())
-        editMenu.addItem(item("Find…", #selector(showFind(_:)), "f", [.command]))
-        editMenu.addItem(item("Goto Offset…", #selector(showGoto(_:)), "l", [.command]))
-        editMenu.addItem(item("Fill Selection…", #selector(showFill(_:)), "f", [.command, .shift]))
+        editMenu.addItem(item(L.t("Find…"), #selector(showFind(_:)), "f", [.command]))
+        editMenu.addItem(item(L.t("Goto Offset…"), #selector(showGoto(_:)), "l", [.command]))
+        editMenu.addItem(item(L.t("Fill Selection…"), #selector(showFill(_:)), "f", [.command, .shift]))
         editMenu.addItem(.separator())
-        editMenu.addItem(item("Insert Bytes…", #selector(showInsert(_:)), "i", [.command, .option]))
-        editMenu.addItem(item("Delete Selection", #selector(deleteSelectedBytes(_:)), "", []))
+        editMenu.addItem(item(L.t("Insert Bytes…"), #selector(showInsert(_:)), "i", [.command, .option]))
+        editMenu.addItem(item(L.t("Delete Selection"), #selector(deleteSelectedBytes(_:)), "", []))
 
         // Tools
         let toolsItem = NSMenuItem()
         mainMenu.addItem(toolsItem)
-        let toolsMenu = NSMenu(title: "Tools")
+        let toolsMenu = NSMenu(title: L.t("Tools"))
         toolsItem.submenu = toolsMenu
-        toolsMenu.addItem(item("Compute Hash / Checksum…", #selector(showHash(_:)), "k", [.command]))
-        toolsMenu.addItem(item("Structure Templates…", #selector(showTemplates(_:)), "t", [.command]))
-        toolsMenu.addItem(item("Load Template File…", #selector(loadTemplateFile(_:)), "", []))
-        toolsMenu.addItem(item("Disk Clone…", #selector(showClone(_:)), "c", [.command, .option]))
-        toolsMenu.addItem(item("Sector / Cluster View…", #selector(showSectorView(_:)), "", []))
-        toolsMenu.addItem(item("Compare With File…", #selector(showCompare(_:)), "e", [.command, .option]))
-        toolsMenu.addItem(item("Disk Image & Backup…", #selector(showImage(_:)), "m", [.command, .option]))
-        toolsMenu.addItem(item("Encrypt / Convert…", #selector(showTransform(_:)), "y", [.command, .option]))
-        toolsMenu.addItem(item("Byte Statistics…", #selector(showStatistics(_:)), "b", [.command, .option]))
-        toolsMenu.addItem(item("File Tools…", #selector(showFileTools(_:)), "f", [.command, .option]))
+        toolsMenu.addItem(item(L.t("Compute Hash / Checksum…"), #selector(showHash(_:)), "k", [.command]))
+        toolsMenu.addItem(item(L.t("Structure Templates…"), #selector(showTemplates(_:)), "t", [.command]))
+        toolsMenu.addItem(item(L.t("Load Template File…"), #selector(loadTemplateFile(_:)), "", []))
+        toolsMenu.addItem(item(L.t("Disk Clone…"), #selector(showClone(_:)), "c", [.command, .option]))
+        toolsMenu.addItem(item(L.t("Sector / Cluster View…"), #selector(showSectorView(_:)), "", []))
+        toolsMenu.addItem(item(L.t("Compare With File…"), #selector(showCompare(_:)), "e", [.command, .option]))
+        toolsMenu.addItem(item(L.t("Disk Image & Backup…"), #selector(showImage(_:)), "m", [.command, .option]))
+        toolsMenu.addItem(item(L.t("Encrypt / Convert…"), #selector(showTransform(_:)), "y", [.command, .option]))
+        toolsMenu.addItem(item(L.t("Byte Statistics…"), #selector(showStatistics(_:)), "b", [.command, .option]))
+        toolsMenu.addItem(item(L.t("File Tools…"), #selector(showFileTools(_:)), "f", [.command, .option]))
         toolsMenu.addItem(.separator())
-        toolsMenu.addItem(item("Toggle Data Inspector", #selector(toggleInspector(_:)), "i", [.command]))
+        toolsMenu.addItem(item(L.t("Toggle Data Inspector"), #selector(toggleInspector(_:)), "i", [.command]))
 
         // Bookmarks
         let bmItem = NSMenuItem()
         mainMenu.addItem(bmItem)
-        let bmMenu = NSMenu(title: "Bookmarks")
+        let bmMenu = NSMenu(title: L.t("Bookmarks"))
         bmItem.submenu = bmMenu
-        bmMenu.addItem(item("Add Bookmark at Cursor", #selector(addBookmark(_:)), "d", [.command]))
-        bmMenu.addItem(item("Remove All Bookmarks", #selector(clearBookmarks(_:)), "", []))
+        bmMenu.addItem(item(L.t("Add bookmark at cursor"), #selector(addBookmark(_:)), "d", [.command]))
+        bmMenu.addItem(item(L.t("Remove All Bookmarks"), #selector(clearBookmarks(_:)), "", []))
 
         // Window
         let winItem = NSMenuItem()
         mainMenu.addItem(winItem)
-        let winMenu = NSMenu(title: "Window")
+        let winMenu = NSMenu(title: L.t("Window"))
         winItem.submenu = winMenu
-        winMenu.addItem(sysItem("Minimize", #selector(NSWindow.performMiniaturize(_:)), "m", [.command]))
-        winMenu.addItem(sysItem("Zoom", #selector(NSWindow.performZoom(_:)), "", []))
+        winMenu.addItem(sysItem(L.t("Minimize"), #selector(NSWindow.performMiniaturize(_:)), "m", [.command]))
+        winMenu.addItem(sysItem(L.t("Zoom"), #selector(NSWindow.performZoom(_:)), "", []))
         NSApp.windowsMenu = winMenu
 
         NSApp.mainMenu = mainMenu
@@ -148,6 +173,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     // MARK: - Actions
+
+    @objc private func changeLanguage(_ sender: NSMenuItem) {
+        guard let raw = sender.representedObject as? String,
+              let language = AppLanguage(rawValue: raw) else { return }
+        state.language = language
+    }
 
     @objc private func openDocument(_ sender: Any?) { state.openFile() }
     @objc private func openDevice(_ sender: Any?) { state.openDevice() }

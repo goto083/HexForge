@@ -5,7 +5,7 @@ struct SidebarView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text("File")
+            Text(L.t("File"))
                 .font(.headline)
                 .padding(.horizontal, 12)
                 .padding(.top, 12)
@@ -25,7 +25,7 @@ struct SidebarView: View {
             Divider()
 
             HStack {
-                Text("Bookmarks")
+                Text(L.t("Bookmarks"))
                     .font(.headline)
                 Spacer()
                 Button {
@@ -34,14 +34,14 @@ struct SidebarView: View {
                     Image(systemName: "plus")
                 }
                 .buttonStyle(.borderless)
-                .help("Add bookmark at cursor")
+                .help(L.t("Add bookmark at cursor"))
             }
             .padding(.horizontal, 12)
             .padding(.top, 10)
             .padding(.bottom, 4)
 
             if state.bookmarks.isEmpty {
-                Text("No bookmarks. Press ⌘D to add one.")
+                Text(L.t("No bookmarks. Press ⌘D to add one."))
                     .font(.caption)
                     .foregroundColor(.secondary)
                     .padding(.horizontal, 12)
@@ -64,7 +64,7 @@ struct SidebarView: View {
                         }
                         .buttonStyle(.plain)
                         .contextMenu {
-                            Button("Delete") {
+                            Button(L.t("Delete")) {
                                 state.bookmarks.removeAll { $0.id == bookmark.id }
                             }
                         }

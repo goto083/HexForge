@@ -6,50 +6,50 @@ struct CloneView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("Disk Clone").font(.headline)
+            Text(L.t("Disk Clone")).font(.headline)
 
-            Text("Copies a source file or raw device to a destination image/device, byte for byte.")
+            Text(L.t("Copies a source file or raw device to a destination image/device, byte for byte."))
                 .font(.caption)
                 .foregroundColor(.secondary)
 
             HStack {
-                Text("Source")
+                Text(L.t("Source"))
                     .frame(width: 90, alignment: .leading)
-                TextField("path, or /dev/rdisk2", text: $state.cloneSource)
+                TextField(L.t("path, or /dev/rdisk2"), text: $state.cloneSource)
                     .textFieldStyle(.roundedBorder)
                     .font(.system(.body, design: .monospaced))
                     .disabled(state.isCloning)
-                Button("File…") { state.chooseCloneSource() }
+                Button(L.t("File…")) { state.chooseCloneSource() }
                     .disabled(state.isCloning)
-                Button("Device…") { state.chooseCloneDevice() }
+                Button(L.t("Device…")) { state.chooseCloneDevice() }
                     .disabled(state.isCloning)
             }
 
             HStack {
-                Text("Destination")
+                Text(L.t("Destination"))
                     .frame(width: 90, alignment: .leading)
-                TextField("output image path", text: $state.cloneDestination)
+                TextField(L.t("output image path"), text: $state.cloneDestination)
                     .textFieldStyle(.roundedBorder)
                     .font(.system(.body, design: .monospaced))
                     .disabled(state.isCloning)
-                Button("File…") { state.chooseCloneDestination() }
+                Button(L.t("File…")) { state.chooseCloneDestination() }
                     .disabled(state.isCloning)
             }
 
             HStack {
-                Text("Block size")
+                Text(L.t("Block size"))
                     .frame(width: 90, alignment: .leading)
-                Picker("", selection: $state.cloneBlockSize) {
-                    Text("512 B").tag(512)
-                    Text("4 KiB").tag(4096)
-                    Text("64 KiB").tag(65536)
-                    Text("1 MiB").tag(1 << 20)
-                    Text("4 MiB").tag(4 << 20)
+                Picker(L.t(""), selection: $state.cloneBlockSize) {
+                    Text(L.t("512 B")).tag(512)
+                    Text(L.t("4 KiB")).tag(4096)
+                    Text(L.t("64 KiB")).tag(65536)
+                    Text(L.t("1 MiB")).tag(1 << 20)
+                    Text(L.t("4 MiB")).tag(4 << 20)
                 }
                 .labelsHidden()
                 .frame(width: 140)
 
-                Toggle("Verify after write", isOn: $state.cloneVerify)
+                Toggle(L.t("Verify after write"), isOn: $state.cloneVerify)
                     .disabled(state.isCloning)
                 Spacer()
             }
@@ -71,13 +71,13 @@ struct CloneView: View {
 
             HStack {
                 if state.isCloning {
-                    Button("Cancel Clone") { state.cancelClone() }
+                    Button(L.t("Cancel Clone")) { state.cancelClone() }
                 }
                 Spacer()
-                Button("Close") { dismiss() }
+                Button(L.t("Close")) { dismiss() }
                     .keyboardShortcut(.cancelAction)
                     .disabled(state.isCloning)
-                Button("Start Clone") { state.startClone() }
+                Button(L.t("Start Clone")) { state.startClone() }
                     .keyboardShortcut(.defaultAction)
                     .disabled(state.isCloning)
             }

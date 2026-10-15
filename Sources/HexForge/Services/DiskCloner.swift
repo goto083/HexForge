@@ -24,15 +24,15 @@ final class DiskCloner {
         var errorDescription: String? {
             switch self {
             case .sameSourceAndDestination:
-                return "Source and destination are the same."
+                return L.t("Source and destination are the same.")
             case .sourceUnreadable(let path):
-                return "Cannot read source: \(path)"
+                return L.f("Cannot read source: %@", path)
             case .destinationUnwritable(let path):
-                return "Cannot write destination: \(path)"
+                return L.f("Cannot write destination: %@", path)
             case .cancelled:
-                return "Clone cancelled."
+                return L.t("Clone cancelled.")
             case .verifyMismatch(let offset):
-                return "Verification failed at offset 0x\(String(offset, radix: 16).uppercased())."
+                return L.f("Verification failed at offset 0x%@.", String(offset, radix: 16).uppercased())
             }
         }
     }

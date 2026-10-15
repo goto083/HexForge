@@ -15,12 +15,12 @@ struct TemplatesView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack {
-                Text("Structure Templates").font(.headline)
+                Text(L.t("Structure Templates")).font(.headline)
                 Spacer()
-                Button("Load…") { state.loadTemplates() }
-                Button("Clear External") { state.clearCustomTemplates() }
+                Button(L.t("Load…")) { state.loadTemplates() }
+                Button(L.t("Clear External")) { state.clearCustomTemplates() }
                     .disabled(state.customTemplates.isEmpty)
-                Button("Close") { dismiss() }.keyboardShortcut(.cancelAction)
+                Button(L.t("Close")) { dismiss() }.keyboardShortcut(.cancelAction)
             }
 
             // Detected format banner
@@ -32,14 +32,14 @@ struct TemplatesView: View {
                     .foregroundColor(.secondary)
                     .lineLimit(2)
                 Spacer()
-                Button("Detect") { autoDetect() }
+                Button(L.t("Detect")) { autoDetect() }
                     .disabled(!state.hasContent)
             }
             .padding(8)
             .background(Color(nsColor: .textBackgroundColor))
             .cornerRadius(6)
 
-            Picker("Template", selection: Binding(
+            Picker(L.t("Template"), selection: Binding(
                 get: { selectedTemplate?.id ?? state.allTemplates[0].id },
                 set: { selectedTemplateID = $0 }
             )) {
@@ -52,14 +52,14 @@ struct TemplatesView: View {
                 Button {
                     evaluate(base: state.cursor)
                 } label: {
-                    Label("Evaluate at cursor", systemImage: "wand.and.stars")
+                    Label(L.t("Evaluate at cursor"), systemImage: "wand.and.stars")
                 }
                 .disabled(!state.hasContent)
 
                 Button {
                     evaluate(base: state.detectedParseOffset)
                 } label: {
-                    Label("Evaluate at 0x\(String(state.detectedParseOffset, radix: 16).uppercased())",
+                    Label(L.f("Evaluate at 0x%@", String(state.detectedParseOffset, radix: 16).uppercased()),
                           systemImage: "scope")
                 }
                 .disabled(!state.hasContent)
@@ -85,7 +85,7 @@ struct TemplatesView: View {
                                 state.goto(offset: field.offset)
                             } label: {
                                 HStack(alignment: .top, spacing: 8) {
-                                    Text("0x" + String(field.offset, radix: 16).uppercased())
+                                    Text(L.t("0x") + String(field.offset, radix: 16).uppercased())
                                         .font(.system(size: 11, design: .monospaced))
                                         .foregroundColor(.secondary)
                                         .frame(width: 80, alignment: .leading)

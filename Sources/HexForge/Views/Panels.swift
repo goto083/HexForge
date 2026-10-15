@@ -9,9 +9,9 @@ struct FindView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("Find & Replace").font(.headline)
+            Text(L.t("Find & Replace")).font(.headline)
 
-            Picker("Mode", selection: $state.findMode) {
+            Picker(L.t("Mode"), selection: $state.findMode) {
                 ForEach(FindMode.allCases) { mode in
                     Text(mode.rawValue).tag(mode)
                 }
@@ -19,7 +19,7 @@ struct FindView: View {
             .pickerStyle(.segmented)
 
             HStack {
-                Text("Find")
+                Text(L.t("Find"))
                     .frame(width: 70, alignment: .leading)
                 TextField(state.findMode == .hex ? "e.g. 4D 5A ?? 00" : "text to search",
                           text: state.findMode == .hex ? $state.findHex : $state.findText)
@@ -28,11 +28,11 @@ struct FindView: View {
             }
 
             if state.findMode == .text {
-                Toggle("Case sensitive", isOn: $state.caseSensitive)
+                Toggle(L.t("Case sensitive"), isOn: $state.caseSensitive)
             }
 
             HStack {
-                Text("Replace")
+                Text(L.t("Replace"))
                     .frame(width: 70, alignment: .leading)
                 TextField(state.findMode == .hex ? "hex bytes, same length" : "replacement text, same length",
                           text: $state.replaceWith)
@@ -40,17 +40,17 @@ struct FindView: View {
                     .font(.system(.body, design: .monospaced))
             }
 
-            Text("Note: replacement is fixed-length (overwrite). Use Edit ▸ Insert Bytes… or Delete Selection to change the file length.")
+            Text(L.t("Note: replacement is fixed-length (overwrite). Use Edit ▸ Insert Bytes… or Delete Selection to change the file length."))
                 .font(.caption)
                 .foregroundColor(.secondary)
 
             HStack {
-                Button("Find Previous") { state.findPrevious() }
-                Button("Find Next") { state.findNext() }
+                Button(L.t("Find Previous")) { state.findPrevious() }
+                Button(L.t("Find Next")) { state.findNext() }
                 Spacer()
-                Button("Replace All") { state.replaceAll() }
+                Button(L.t("Replace All")) { state.replaceAll() }
                     .disabled(state.isReadOnly)
-                Button("Close") { dismiss() }
+                Button(L.t("Close")) { dismiss() }
                     .keyboardShortcut(.cancelAction)
             }
         }
@@ -70,14 +70,14 @@ struct GotoView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("Goto Offset").font(.headline)
+            Text(L.t("Goto Offset")).font(.headline)
 
-            TextField("Offset — hex by default, or 0d for decimal", text: $text)
+            TextField(L.t("Offset — hex by default, or 0d for decimal"), text: $text)
                 .textFieldStyle(.roundedBorder)
                 .font(.system(.body, design: .monospaced))
                 .onSubmit(go)
 
-            Text("Examples: 1F40  ·  0x1F40  ·  0d8000")
+            Text(L.t("Examples: 1F40  ·  0x1F40  ·  0d8000"))
                 .font(.caption)
                 .foregroundColor(.secondary)
 
@@ -87,8 +87,8 @@ struct GotoView: View {
 
             HStack {
                 Spacer()
-                Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction)
-                Button("Go", action: go).keyboardShortcut(.defaultAction)
+                Button(L.t("Cancel")) { dismiss() }.keyboardShortcut(.cancelAction)
+                Button(L.t("Go"), action: go).keyboardShortcut(.defaultAction)
             }
         }
         .padding(20)
@@ -136,16 +136,16 @@ struct FillView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("Fill Selection").font(.headline)
+            Text(L.t("Fill Selection")).font(.headline)
 
-            Text("Target: \(state.hasSelection ? "\(state.selectionLength) selected byte(s)" : "current byte only")")
+            Text(L.f("Target: %@", state.hasSelection ? L.f("%d selected byte(s)", state.selectionLength) : L.t("current byte only")))
                 .font(.caption)
                 .foregroundColor(.secondary)
 
             HStack {
-                Text("Value")
+                Text(L.t("Value"))
                     .frame(width: 70, alignment: .leading)
-                TextField("hex byte (e.g. 00, FF) or single char", text: $text)
+                TextField(L.t("hex byte (e.g. 00, FF) or single char"), text: $text)
                     .textFieldStyle(.roundedBorder)
                     .font(.system(.body, design: .monospaced))
             }
@@ -156,8 +156,8 @@ struct FillView: View {
 
             HStack {
                 Spacer()
-                Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction)
-                Button("Fill", action: fill).keyboardShortcut(.defaultAction)
+                Button(L.t("Cancel")) { dismiss() }.keyboardShortcut(.cancelAction)
+                Button(L.t("Fill"), action: fill).keyboardShortcut(.defaultAction)
                     .disabled(state.isReadOnly || !state.hasContent)
             }
         }
@@ -197,16 +197,16 @@ struct InsertView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("Insert Bytes").font(.headline)
+            Text(L.t("Insert Bytes")).font(.headline)
 
-            Text("Inserted at offset \(state.cursor) (0x\(String(state.cursor, radix: 16).uppercased())), growing the file.")
+            Text(L.f("Inserted at offset %d (0x%@), growing the file.", state.cursor, String(state.cursor, radix: 16).uppercased()))
                 .font(.caption)
                 .foregroundColor(.secondary)
 
             HStack {
-                Text("Hex")
+                Text(L.t("Hex"))
                     .frame(width: 70, alignment: .leading)
-                TextField("e.g. DE AD BE EF", text: $text)
+                TextField(L.t("e.g. DE AD BE EF"), text: $text)
                     .textFieldStyle(.roundedBorder)
                     .font(.system(.body, design: .monospaced))
                     .onSubmit(insert)
@@ -217,7 +217,7 @@ struct InsertView: View {
             }
 
             HStack {
-                Button("From Clipboard") {
+                Button(L.t("From Clipboard")) {
                     if let s = NSPasteboard.general.string(forType: .string) {
                         text = s
                         error = nil
@@ -226,8 +226,8 @@ struct InsertView: View {
                     }
                 }
                 Spacer()
-                Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction)
-                Button("Insert", action: insert).keyboardShortcut(.defaultAction)
+                Button(L.t("Cancel")) { dismiss() }.keyboardShortcut(.cancelAction)
+                Button(L.t("Insert"), action: insert).keyboardShortcut(.defaultAction)
                     .disabled(state.isReadOnly)
             }
         }
@@ -255,11 +255,11 @@ struct HashView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("Hash / Checksum").font(.headline)
+            Text(L.t("Hash / Checksum")).font(.headline)
 
-            Picker("Scope", selection: $scopeSelection) {
-                Text("Whole file").tag(false)
-                Text("Selection").tag(true)
+            Picker(L.t("Scope"), selection: $scopeSelection) {
+                Text(L.t("Whole file")).tag(false)
+                Text(L.t("Selection")).tag(true)
             }
             .pickerStyle(.segmented)
             .disabled(!state.hasSelection)
@@ -268,7 +268,7 @@ struct HashView: View {
                 Button {
                     state.computeHashes(overSelection: scopeSelection)
                 } label: {
-                    Label("Compute", systemImage: "play.fill")
+                    Label(L.t("Compute"), systemImage: "play.fill")
                 }
                 .disabled(!state.hasContent || state.isHashing)
 
@@ -276,9 +276,9 @@ struct HashView: View {
                     ProgressView().controlSize(.small)
                 }
                 Spacer()
-                Button("Copy All") { copyAll() }
+                Button(L.t("Copy All")) { copyAll() }
                     .disabled(state.hashResults.isEmpty)
-                Button("Close") { dismiss() }.keyboardShortcut(.cancelAction)
+                Button(L.t("Close")) { dismiss() }.keyboardShortcut(.cancelAction)
             }
 
             if state.hashResults.isEmpty {

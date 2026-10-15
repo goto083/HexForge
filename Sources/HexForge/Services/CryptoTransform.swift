@@ -46,21 +46,21 @@ enum TransformOperation: String, CaseIterable, Identifiable {
 
     var description: String {
         switch self {
-        case .xorKey:           return "XORs every byte with a repeating key (hex or text)."
-        case .bitwiseAnd:       return "ANDs every byte with the constant."
-        case .bitwiseOr:        return "ORs every byte with the constant."
-        case .bitwiseNot:       return "Inverts every bit of every selected byte."
-        case .addConstant:      return "Adds the constant to every byte (mod 256)."
-        case .subtractConstant: return "Subtracts the constant from every byte (mod 256)."
-        case .reverseBytes:     return "Reverses the byte order of the whole range."
-        case .swapWords:        return "Reverses the bytes inside each word (endianness swap)."
-        case .base64Encode:     return "Encodes the bytes as Base64 text (length grows)."
-        case .base64Decode:     return "Decodes Base64 text back to bytes (length shrinks)."
-        case .rot13:            return "Rotates ASCII letters by 13 positions."
-        case .aesECBEncrypt:    return "AES encrypt with PKCS#7 padding (ECB or CBC)."
-        case .aesECBDecrypt:    return "AES decrypt; PKCS#7 padding is removed."
-        case .desECBEncrypt:    return "DES encrypt with PKCS#7 padding (ECB or CBC)."
-        case .desECBDecrypt:    return "DES decrypt; PKCS#7 padding is removed."
+        case .xorKey:           return L.t("XORs every byte with a repeating key (hex or text).")
+        case .bitwiseAnd:       return L.t("ANDs every byte with the constant.")
+        case .bitwiseOr:        return L.t("ORs every byte with the constant.")
+        case .bitwiseNot:       return L.t("Inverts every bit of every selected byte.")
+        case .addConstant:      return L.t("Adds the constant to every byte (mod 256).")
+        case .subtractConstant: return L.t("Subtracts the constant from every byte (mod 256).")
+        case .reverseBytes:     return L.t("Reverses the byte order of the whole range.")
+        case .swapWords:        return L.t("Reverses the bytes inside each word (endianness swap).")
+        case .base64Encode:     return L.t("Encodes the bytes as Base64 text (length grows).")
+        case .base64Decode:     return L.t("Decodes Base64 text back to bytes (length shrinks).")
+        case .rot13:            return L.t("Rotates ASCII letters by 13 positions.")
+        case .aesECBEncrypt:    return L.t("AES encrypt with PKCS#7 padding (ECB or CBC).")
+        case .aesECBDecrypt:    return L.t("AES decrypt; PKCS#7 padding is removed.")
+        case .desECBEncrypt:    return L.t("DES encrypt with PKCS#7 padding (ECB or CBC).")
+        case .desECBDecrypt:    return L.t("DES decrypt; PKCS#7 padding is removed.")
         }
     }
 }
@@ -92,9 +92,9 @@ enum TransformError: LocalizedError {
         switch self {
         case .invalidKey(let detail):      return detail
         case .invalidIV(let detail):       return detail
-        case .invalidConstant(let detail): return "Constant: \(detail)"
-        case .invalidBase64:               return "Input is not valid Base64."
-        case .cipherFailed(let status):    return "Cipher failed (status \(status))."
+        case .invalidConstant(let detail): return L.f("Constant: %@", detail)
+        case .invalidBase64:               return L.t("Input is not valid Base64.")
+        case .cipherFailed(let status):    return L.f("Cipher failed (status %d).", status)
         }
     }
 }
@@ -108,7 +108,7 @@ enum CryptoTransform {
             let key = try parseBytes(request.keyText, isHex: request.keyIsHex, what: "key")
             var out = input
             for i in out.indices { out[i] ^= key[i % key.count] }
-            return TransformOutcome(bytes: out, message: "XORed \(input.count) byte(s) with a \(key.count)-byte key")
+            return TransformOutcome(bytes: out, message: L.f("XORed %d byte(s) with a %d-byte key", input.count, key.count))
 
         case .bitwiseAnd, .bitwiseOr, .addConstant, .subtractConstant:
             let c = try parseConstant(request.constantText)
@@ -122,13 +122,13 @@ enum CryptoTransform {
                 default: break
                 }
             }
-            return TransformOutcome(bytes: out, message: "\(request.operation.rawValue) applied to \(input.count) byte(s)")
+            return TransformOutcome(bytes: out, message: L.f("%@ applied to %d byte(s)", request.operation.rawValue, input.count))
 
         case .bitwiseNot:
-            return TransformOutcome(bytes: input.map { ~$0 }, message: "Inverted \(input.count) byte(s)")
+            return TransformOutcome(bytes: input.map { ~$0 }, message: L.f("Inverted %d byte(s)", input.count))
 
         case .reverseBytes:
-            return TransformOutcome(bytes: Array(input.reversed()), message: "Reversed \(input.count) byte(s)")
+            return TransformOutcome(bytes: Array(input.reversed()), message: L.f("Reversed %d byte(s)", input.count))
 
         case .swapWords:
             let word = max(1, request.wordSize)
@@ -139,17 +139,17 @@ enum CryptoTransform {
                 out.replaceSubrange(start..<(start + word), with: reversed)
                 start += word
             }
-            return TransformOutcome(bytes: out, message: "Byte-swapped \(word)-byte words")
+            return TransformOutcome(bytes: out, message: L.f("Byte-swapped %d-byte words", word))
 
         case .base64Encode:
             let text = Data(input).base64EncodedString()
-            return TransformOutcome(bytes: Array(text.utf8), message: "Base64 encoded \(input.count) byte(s) → \(text.count) chars")
+            return TransformOutcome(bytes: Array(text.utf8), message: L.f("Base64 encoded %d byte(s) → %d chars", input.count, text.count))
 
         case .base64Decode:
             let text = String(decoding: input, as: UTF8.self)
                 .filter { !$0.isWhitespace }
             guard let data = Data(base64Encoded: text) else { throw TransformError.invalidBase64 }
-            return TransformOutcome(bytes: [UInt8](data), message: "Base64 decoded \(input.count) char(s) → \(data.count) byte(s)")
+            return TransformOutcome(bytes: [UInt8](data), message: L.f("Base64 decoded %d char(s) → %d byte(s)", input.count, data.count))
 
         case .rot13:
             var out = input
@@ -158,7 +158,7 @@ enum CryptoTransform {
                 if b >= 0x41, b <= 0x5A { out[i] = 0x41 + (b - 0x41 + 13) % 26 }
                 else if b >= 0x61, b <= 0x7A { out[i] = 0x61 + (b - 0x61 + 13) % 26 }
             }
-            return TransformOutcome(bytes: out, message: "ROT13 applied to \(input.count) byte(s)")
+            return TransformOutcome(bytes: out, message: L.f("ROT13 applied to %d byte(s)", input.count))
 
         case .aesECBEncrypt, .aesECBDecrypt, .desECBEncrypt, .desECBDecrypt:
             return try runCipher(request, input: input)
@@ -188,7 +188,7 @@ enum CryptoTransform {
         let out = try crypt(op, algorithm: algorithm, options: options, key: key, iv: iv, input: input)
         let name = isAES ? "AES" : "DES"
         let mode = request.ecbMode ? "ECB" : "CBC"
-        return TransformOutcome(bytes: out, message: "\(name)-\(mode) \(encrypt ? "encrypted" : "decrypted") \(input.count) → \(out.count) byte(s)")
+        return TransformOutcome(bytes: out, message: L.f("%@-%@ %@ %d → %d byte(s)", name, mode, encrypt ? L.t("encrypted") : L.t("decrypted"), input.count, out.count))
     }
 
     private static func crypt(_ op: CCOperation,
@@ -228,16 +228,16 @@ enum CryptoTransform {
     private static func parseBytes(_ text: String, isHex: Bool, what: String) throws -> [UInt8] {
         if isHex {
             let cleaned = text.filter { !$0.isWhitespace && $0 != "," && $0 != "-" }
-            guard !cleaned.isEmpty else { throw TransformError.invalidKey("\(what) is empty") }
+            guard !cleaned.isEmpty else { throw TransformError.invalidKey(L.f("%@ is empty", L.t(what))) }
             guard cleaned.count % 2 == 0 else {
-                throw TransformError.invalidKey("\(what) hex needs an even number of digits")
+                throw TransformError.invalidKey(L.f("%@ hex needs an even number of digits", L.t(what)))
             }
             var out: [UInt8] = []
             var index = cleaned.startIndex
             while index < cleaned.endIndex {
                 let next = cleaned.index(index, offsetBy: 2)
                 guard let byte = UInt8(cleaned[index..<next], radix: 16) else {
-                    throw TransformError.invalidKey("\(what) contains non-hex characters")
+                    throw TransformError.invalidKey(L.f("%@ contains non-hex characters", L.t(what)))
                 }
                 out.append(byte)
                 index = next
@@ -245,7 +245,7 @@ enum CryptoTransform {
             return out
         }
         let bytes = Array(text.utf8)
-        guard !bytes.isEmpty else { throw TransformError.invalidKey("\(what) is empty") }
+        guard !bytes.isEmpty else { throw TransformError.invalidKey(L.f("%@ is empty", L.t(what))) }
         return bytes
     }
 
@@ -255,7 +255,7 @@ enum CryptoTransform {
             ? String(cleaned.dropFirst(2)) : cleaned
         if let value = UInt8(hex, radix: 16) { return value }
         if let value = UInt8(cleaned) { return value }
-        throw TransformError.invalidConstant("must be a byte value (0x00–0xFF)")
+        throw TransformError.invalidConstant(L.t("must be a byte value (0x00–0xFF)"))
     }
 
     private static func normalize(_ bytes: [UInt8], targets: [Int]) -> [UInt8] {

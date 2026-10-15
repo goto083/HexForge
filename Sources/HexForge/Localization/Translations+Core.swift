@@ -1,0 +1,40 @@
+extension L10n {
+    /// ContentView · SidebarView · InspectorView
+    static let zhCore: [String: String] = [
+        "Add bookmark at cursor": "在光标处添加书签",
+        "Bookmarks": "书签",
+        "Byte Statistics…": "字节统计…",
+        "Bytes per row": "每行字节数",
+        "Cols": "列",
+        "Compare With File…": "与文件比较…",
+        "Compute Hash / Checksum…": "计算哈希 / 校验和…",
+        "Data Inspector": "数据解析器",
+        "Delete": "删除",
+        "Disk Clone…": "磁盘克隆…",
+        "Disk Image & Backup…": "磁盘映像与备份…",
+        "Encrypt / Convert…": "加密 / 转换…",
+        "File": "文件",
+        "File Tools…": "文件工具…",
+        "Find": "查找",
+        "Goto": "跳转",
+        "Load Template File…": "加载模板文件…",
+        "MODIFIED": "已修改",
+        "No bookmarks. Press ⌘D to add one.": "暂无书签。按 ⌘D 添加。",
+        "Open": "打开",
+        "READ-ONLY": "只读",
+        "Save": "保存",
+        "Sector / Cluster View…": "扇区 / 簇视图…",
+        "Structure Templates…": "结构模板…",
+        "Toggle data inspector": "切换数据解析器",
+        "Tools": "工具",
+        // Status bar templates
+        "Offset: 0x%@": "偏移：0x%@",
+        "Cursor: %d": "光标：%d",
+        "Sector: %d  ·  Cluster: %d": "扇区：%d  ·  簇：%d",
+        "Sel: %d byte(s)": "已选：%d 字节",
+        "Size: %@ (%d bytes)": "大小：%@（%d 字节）",
+        "Pane: %@": "窗格：%@",
+        "Offset 0x%@  ·  %d byte(s)": "偏移 0x%@  ·  %d 字节",
+        "No data at cursor.\\nOpen a file to inspect its bytes.": "光标处没有数据。\\n打开文件以查看其字节。"
+    ]
+}

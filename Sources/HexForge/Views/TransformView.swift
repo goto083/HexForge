@@ -6,23 +6,23 @@ struct TransformView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("Encrypt / Convert").font(.headline)
-            Text("Applies a byte transform to the selection or the whole file. Every operation is a single undoable edit.")
+            Text(L.t("Encrypt / Convert")).font(.headline)
+            Text(L.t("Applies a byte transform to the selection or the whole file. Every operation is a single undoable edit."))
                 .font(.caption)
                 .foregroundColor(.secondary)
 
             HStack {
-                Text("Scope").frame(width: 80, alignment: .leading)
+                Text(L.t("Scope")).frame(width: 80, alignment: .leading)
                 if state.hasSelection {
-                    Picker("", selection: $state.transformScopeIsSelection) {
-                        Text("Selection (\(state.selectionLength) byte(s))").tag(true)
-                        Text("Whole file (\(state.size) byte(s))").tag(false)
+                    Picker(L.t(""), selection: $state.transformScopeIsSelection) {
+                        Text(L.f("Selection (%d byte(s))", state.selectionLength)).tag(true)
+                        Text(L.f("Whole file (%d byte(s))", state.size)).tag(false)
                     }
                     .labelsHidden()
                     .pickerStyle(.segmented)
                     .frame(width: 320)
                 } else {
-                    Text("Whole file (\(state.size) byte(s))")
+                    Text(L.f("Whole file (%d byte(s))", state.size))
                         .font(.system(.body, design: .monospaced))
                         .foregroundColor(.secondary)
                 }
@@ -30,8 +30,8 @@ struct TransformView: View {
             }
 
             HStack {
-                Text("Operation").frame(width: 80, alignment: .leading)
-                Picker("", selection: $state.transformOperation) {
+                Text(L.t("Operation")).frame(width: 80, alignment: .leading)
+                Picker(L.t(""), selection: $state.transformOperation) {
                     ForEach(TransformOperation.allCases) { op in
                         Text(op.rawValue).tag(op)
                     }
@@ -46,20 +46,20 @@ struct TransformView: View {
 
             if state.transformOperation.usesKey {
                 HStack {
-                    Text("Key").frame(width: 80, alignment: .leading)
+                    Text(L.t("Key")).frame(width: 80, alignment: .leading)
                     TextField(state.transformKeyIsHex ? "hex, e.g. DE AD BE EF" : "text key",
                               text: $state.transformKey)
                         .textFieldStyle(.roundedBorder)
                         .font(.system(.body, design: .monospaced))
-                    Toggle("Hex", isOn: $state.transformKeyIsHex)
+                    Toggle(L.t("Hex"), isOn: $state.transformKeyIsHex)
                         .toggleStyle(.checkbox)
                 }
             }
 
             if state.transformOperation.usesConstant {
                 HStack {
-                    Text("Constant").frame(width: 80, alignment: .leading)
-                    TextField("0x00–0xFF", text: $state.transformConstant)
+                    Text(L.t("Constant")).frame(width: 80, alignment: .leading)
+                    TextField(L.t("0x00–0xFF"), text: $state.transformConstant)
                         .textFieldStyle(.roundedBorder)
                         .font(.system(.body, design: .monospaced))
                         .frame(width: 120)
@@ -69,11 +69,11 @@ struct TransformView: View {
 
             if state.transformOperation.usesWordSize {
                 HStack {
-                    Text("Word").frame(width: 80, alignment: .leading)
-                    Picker("", selection: $state.transformWordSize) {
-                        Text("16-bit").tag(2)
-                        Text("32-bit").tag(4)
-                        Text("64-bit").tag(8)
+                    Text(L.t("Word")).frame(width: 80, alignment: .leading)
+                    Picker(L.t(""), selection: $state.transformWordSize) {
+                        Text(L.t("16-bit")).tag(2)
+                        Text(L.t("32-bit")).tag(4)
+                        Text(L.t("64-bit")).tag(8)
                     }
                     .labelsHidden()
                     .frame(width: 160)
@@ -83,10 +83,10 @@ struct TransformView: View {
 
             if state.transformOperation.isCipher {
                 HStack {
-                    Text("Mode").frame(width: 80, alignment: .leading)
-                    Picker("", selection: $state.transformECBMode) {
-                        Text("ECB").tag(true)
-                        Text("CBC").tag(false)
+                    Text(L.t("Mode")).frame(width: 80, alignment: .leading)
+                    Picker(L.t(""), selection: $state.transformECBMode) {
+                        Text(L.t("ECB")).tag(true)
+                        Text(L.t("CBC")).tag(false)
                     }
                     .labelsHidden()
                     .pickerStyle(.segmented)
@@ -95,13 +95,13 @@ struct TransformView: View {
                 }
                 if !state.transformECBMode {
                     HStack {
-                        Text("IV").frame(width: 80, alignment: .leading)
-                        TextField("hex IV (16 bytes for AES, 8 for DES)", text: $state.transformIV)
+                        Text(L.t("IV")).frame(width: 80, alignment: .leading)
+                        TextField(L.t("hex IV (16 bytes for AES, 8 for DES)"), text: $state.transformIV)
                             .textFieldStyle(.roundedBorder)
                             .font(.system(.body, design: .monospaced))
                     }
                 }
-                Text("Keys are normalised to the nearest valid length (AES 16/24/32, DES 8); PKCS#7 padding is added/removed.")
+                Text(L.t("Keys are normalised to the nearest valid length (AES 16/24/32, DES 8); PKCS#7 padding is added/removed."))
                     .font(.caption2)
                     .foregroundColor(.secondary)
             }
@@ -117,9 +117,9 @@ struct TransformView: View {
 
             HStack {
                 Spacer()
-                Button("Close") { dismiss() }
+                Button(L.t("Close")) { dismiss() }
                     .keyboardShortcut(.cancelAction)
-                Button("Apply") { state.applyTransform() }
+                Button(L.t("Apply")) { state.applyTransform() }
                     .keyboardShortcut(.defaultAction)
                     .disabled(state.size == 0 || state.isReadOnly)
             }

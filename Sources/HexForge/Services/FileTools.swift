@@ -27,13 +27,13 @@ enum FileTools {
 
         var errorDescription: String? {
             switch self {
-            case .sourceUnreadable(let path):      return "Cannot read source: \(path)"
-            case .destinationUnwritable(let path): return "Cannot write destination: \(path)"
-            case .invalidSize:                     return "The requested size is not valid."
-            case .emptySource:                     return "The source is empty."
-            case .noParts:                         return "No parts were supplied to join."
-            case .cancelled:                       return "Operation cancelled."
-            case .randomFailed:                    return "Could not obtain random bytes."
+            case .sourceUnreadable(let path):      return L.f("Cannot read source: %@", path)
+            case .destinationUnwritable(let path): return L.f("Cannot write destination: %@", path)
+            case .invalidSize:                     return L.t("The requested size is not valid.")
+            case .emptySource:                     return L.t("The source is empty.")
+            case .noParts:                         return L.t("No parts were supplied to join.")
+            case .cancelled:                       return L.t("Operation cancelled.")
+            case .randomFailed:                    return L.t("Could not obtain random bytes.")
             }
         }
     }

@@ -13,13 +13,13 @@ struct InspectorView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text("Data Inspector")
+            Text(L.t("Data Inspector"))
                 .font(.headline)
                 .padding(.horizontal, 12)
                 .padding(.top, 12)
                 .padding(.bottom, 6)
 
-            Text("Offset 0x\(String(state.cursor, radix: 16).uppercased())  ·  \(state.selectionLength) byte(s)")
+            Text(L.f("Offset 0x%@  ·  %d byte(s)", String(state.cursor, radix: 16).uppercased(), state.selectionLength))
                 .font(.caption)
                 .foregroundColor(.secondary)
                 .padding(.horizontal, 12)
@@ -30,7 +30,7 @@ struct InspectorView: View {
             let values = DataInterpreter.interpret(interpretedBuffer)
             if values.isEmpty {
                 Spacer()
-                Text("No data at cursor.\nOpen a file to inspect its bytes.")
+                Text(L.t("No data at cursor.\\nOpen a file to inspect its bytes."))
                     .font(.callout)
                     .foregroundColor(.secondary)
                     .multilineTextAlignment(.center)

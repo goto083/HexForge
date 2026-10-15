@@ -34,31 +34,31 @@ struct ImageView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Disk Image & Backup").font(.headline)
-            Text("Create a disk image from a file or raw device, verify it later, and keep reusable backup jobs.")
+            Text(L.t("Disk Image & Backup")).font(.headline)
+            Text(L.t("Create a disk image from a file or raw device, verify it later, and keep reusable backup jobs."))
                 .font(.caption)
                 .foregroundColor(.secondary)
 
             Group {
                 row("Source") {
-                    TextField("path, or /dev/rdisk2", text: $state.imageSource)
+                    TextField(L.t("path, or /dev/rdisk2"), text: $state.imageSource)
                         .textFieldStyle(.roundedBorder)
                         .font(.system(.body, design: .monospaced))
                         .disabled(state.isImaging)
-                    Button("File…") { state.chooseImageSource() }.disabled(state.isImaging)
-                    Button("Device…") { state.chooseImageDevice() }.disabled(state.isImaging)
+                    Button(L.t("File…")) { state.chooseImageSource() }.disabled(state.isImaging)
+                    Button(L.t("Device…")) { state.chooseImageDevice() }.disabled(state.isImaging)
                 }
 
                 row("Destination") {
-                    TextField("folder for the image files", text: $state.imageDestinationFolder)
+                    TextField(L.t("folder for the image files"), text: $state.imageDestinationFolder)
                         .textFieldStyle(.roundedBorder)
                         .font(.system(.body, design: .monospaced))
                         .disabled(state.isImaging)
-                    Button("Folder…") { state.chooseImageDestination() }.disabled(state.isImaging)
+                    Button(L.t("Folder…")) { state.chooseImageDestination() }.disabled(state.isImaging)
                 }
 
                 row("Image name") {
-                    TextField("derived from source when empty", text: $state.imageName)
+                    TextField(L.t("derived from source when empty"), text: $state.imageName)
                         .textFieldStyle(.roundedBorder)
                         .font(.system(.body, design: .monospaced))
                         .disabled(state.isImaging)
@@ -67,19 +67,19 @@ struct ImageView: View {
 
             HStack(spacing: 16) {
                 HStack(spacing: 6) {
-                    Text("Block").frame(width: 46, alignment: .leading)
-                    Picker("", selection: $state.imageBlockSize) {
-                        Text("512 B").tag(512)
-                        Text("64 KiB").tag(65536)
-                        Text("1 MiB").tag(1 << 20)
-                        Text("4 MiB").tag(4 << 20)
+                    Text(L.t("Block")).frame(width: 46, alignment: .leading)
+                    Picker(L.t(""), selection: $state.imageBlockSize) {
+                        Text(L.t("512 B")).tag(512)
+                        Text(L.t("64 KiB")).tag(65536)
+                        Text(L.t("1 MiB")).tag(1 << 20)
+                        Text(L.t("4 MiB")).tag(4 << 20)
                     }
                     .labelsHidden()
                     .frame(width: 110)
                 }
                 HStack(spacing: 6) {
-                    Text("Split").frame(width: 40, alignment: .leading)
-                    Picker("", selection: $state.imageSplitSize) {
+                    Text(L.t("Split")).frame(width: 40, alignment: .leading)
+                    Picker(L.t(""), selection: $state.imageSplitSize) {
                         ForEach(Self.splitChoices) { choice in
                             Text(choice.id).tag(choice.bytes)
                         }
@@ -92,17 +92,17 @@ struct ImageView: View {
             }
 
             HStack(spacing: 18) {
-                Toggle("Compress (LZFSE)", isOn: $state.imageCompress)
+                Toggle(L.t("Compress (LZFSE)"), isOn: $state.imageCompress)
                     .disabled(state.isImaging)
-                Toggle("Verify after write", isOn: $state.imageVerify)
+                Toggle(L.t("Verify after write"), isOn: $state.imageVerify)
                     .disabled(state.isImaging)
-                Toggle("Block checksums", isOn: $state.imageChecksum)
+                Toggle(L.t("Block checksums"), isOn: $state.imageChecksum)
                     .disabled(state.isImaging)
             }
             .toggleStyle(.checkbox)
 
             if state.imageCompress {
-                Text("Compressed images are a single volume and cannot be split.")
+                Text(L.t("Compressed images are a single volume and cannot be split."))
                     .font(.caption2)
                     .foregroundColor(.secondary)
             }
@@ -130,14 +130,14 @@ struct ImageView: View {
 
             HStack {
                 if state.isImaging {
-                    Button("Cancel") { state.cancelImage() }
+                    Button(L.t("Cancel")) { state.cancelImage() }
                 }
-                Button("Verify Image…") { state.verifyImageFile() }
+                Button(L.t("Verify Image…")) { state.verifyImageFile() }
                     .disabled(state.isImaging)
-                Button("Save as Backup Job") { state.addBackupJob() }
+                Button(L.t("Save as Backup Job")) { state.addBackupJob() }
                     .disabled(state.isImaging)
                 Spacer()
-                Button("Create Image") { state.startImage() }
+                Button(L.t("Create Image")) { state.startImage() }
                     .keyboardShortcut(.defaultAction)
                     .disabled(state.isImaging)
             }
@@ -145,7 +145,7 @@ struct ImageView: View {
             Divider()
 
             HStack {
-                Text("Backup jobs").font(.subheadline).bold()
+                Text(L.t("Backup jobs")).font(.subheadline).bold()
                 Spacer()
                 Text("\(state.backupJobs.count)")
                     .font(.caption)
@@ -153,7 +153,7 @@ struct ImageView: View {
             }
 
             if state.backupJobs.isEmpty {
-                Text("No saved jobs. Configure a source/destination above and press “Save as Backup Job”.")
+                Text(L.t("No saved jobs. Configure a source/destination above and press “Save as Backup Job”."))
                     .font(.caption)
                     .foregroundColor(.secondary)
             } else {
@@ -170,7 +170,7 @@ struct ImageView: View {
 
             HStack {
                 Spacer()
-                Button("Close") { dismiss() }
+                Button(L.t("Close")) { dismiss() }
                     .keyboardShortcut(.cancelAction)
             }
         }
@@ -201,16 +201,16 @@ struct ImageView: View {
                     .foregroundColor(.secondary)
             }
             Spacer()
-            Picker("", selection: intervalBinding(job)) {
+            Picker(L.t(""), selection: intervalBinding(job)) {
                 ForEach(Self.intervalChoices) { choice in
                     Text(choice.id).tag(choice.minutes)
                 }
             }
             .labelsHidden()
             .frame(width: 130)
-            Button("Run") { state.runBackupJob(job) }
+            Button(L.t("Run")) { state.runBackupJob(job) }
                 .disabled(state.isImaging)
-            Button("Delete") { state.removeBackupJob(job) }
+            Button(L.t("Delete")) { state.removeBackupJob(job) }
                 .disabled(state.isImaging)
         }
         .padding(.vertical, 4)

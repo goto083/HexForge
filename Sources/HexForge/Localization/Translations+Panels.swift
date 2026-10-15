@@ -1,0 +1,40 @@
+extension L10n {
+    /// Panels.swift · HexEditorView.swift
+    static let zhPanels: [String: String] = [
+        "Cancel": "取消",
+        "Case sensitive": "区分大小写",
+        "Close": "关闭",
+        "Compute": "计算",
+        "Copy All": "全部复制",
+        "e.g. DE AD BE EF": "例如 DE AD BE EF",
+        "Examples: 1F40  ·  0x1F40  ·  0d8000": "示例：1F40  ·  0x1F40  ·  0d8000",
+        "Fill": "填充",
+        "Fill Selection": "填充选区",
+        "Find": "查找",
+        "Find & Replace": "查找与替换",
+        "Find Next": "查找下一个",
+        "Find Previous": "查找上一个",
+        "From Clipboard": "从剪贴板",
+        "Go": "执行",
+        "Goto Offset": "跳转到偏移",
+        "Hash / Checksum": "哈希 / 校验和",
+        "Hex": "十六进制",
+        "hex byte (e.g. 00, FF) or single char": "十六进制字节（如 00、FF）或单个字符",
+        "Insert": "插入",
+        "Insert Bytes": "插入字节",
+        "Mode": "模式",
+        "Note: replacement is fixed-length (overwrite). Use Edit ▸ Insert Bytes… or Delete Selection to change the file length.": "注意：替换为定长覆盖。如需改变文件长度，请使用“编辑 ▸ 插入字节…”或“删除选区”。",
+        "Offset — hex by default, or 0d for decimal": "偏移 — 默认十六进制，前缀 0d 表示十进制",
+        "Replace": "替换",
+        "Replace All": "全部替换",
+        "Scope": "范围",
+        "Selection": "选区",
+        "Value": "值",
+        "Whole file": "整个文件",
+        // Templates with runtime values
+        "Target: %@": "目标：%@",
+        "%d selected byte(s)": "%d 个已选字节",
+        "current byte only": "仅当前字节",
+        "Inserted at offset %d (0x%@), growing the file.": "已插入到偏移 %d（0x%@），文件已增长。"
+    ]
+}

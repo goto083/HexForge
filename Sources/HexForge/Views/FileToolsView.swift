@@ -36,9 +36,9 @@ struct FileToolsView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Text("File Tools").font(.headline)
+                Text(L.t("File Tools")).font(.headline)
                 Spacer()
-                Picker("", selection: $state.fileToolTab) {
+                Picker(L.t(""), selection: $state.fileToolTab) {
                     ForEach(FileToolTab.allCases) { tab in
                         Text(tab.rawValue).tag(tab)
                     }
@@ -60,7 +60,7 @@ struct FileToolsView: View {
 
             HStack {
                 Spacer()
-                Button("Close") { dismiss() }
+                Button(L.t("Close")) { dismiss() }
                     .keyboardShortcut(.cancelAction)
             }
         }
@@ -78,12 +78,12 @@ struct FileToolsView: View {
 
     private var generateForm: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Generate cryptographically-secure random bytes directly into the open document.")
+            Text(L.t("Generate cryptographically-secure random bytes directly into the open document."))
                 .font(.caption)
                 .foregroundColor(.secondary)
 
             row("Mode") {
-                Picker("", selection: $state.randomGenerateMode) {
+                Picker(L.t(""), selection: $state.randomGenerateMode) {
                     ForEach(RandomGenerateMode.allCases) { mode in
                         Text(mode.rawValue).tag(mode)
                     }
@@ -95,7 +95,7 @@ struct FileToolsView: View {
             }
 
             row("Count") {
-                TextField("256, 4k, 1M…", text: $state.randomGenerateCountText)
+                TextField(L.t("256, 4k, 1M…"), text: $state.randomGenerateCountText)
                     .textFieldStyle(.roundedBorder)
                     .font(.system(.body, design: .monospaced))
                     .frame(width: 140)
@@ -107,7 +107,7 @@ struct FileToolsView: View {
                 Spacer()
             }
 
-            Text("Up to \(state.byteCountString(FileTools.maxGenerateBytes)) can be generated into the editor per edit.")
+            Text(L.f("Up to %@ can be generated into the editor per edit.", state.byteCountString(FileTools.maxGenerateBytes)))
                 .font(.caption2)
                 .foregroundColor(.secondary)
 
@@ -117,10 +117,10 @@ struct FileToolsView: View {
 
             HStack {
                 if state.isGenerating {
-                    Button("Cancel") { state.cancelGenerate() }
+                    Button(L.t("Cancel")) { state.cancelGenerate() }
                 }
                 Spacer()
-                Button("Generate") { state.generateRandomData() }
+                Button(L.t("Generate")) { state.generateRandomData() }
                     .keyboardShortcut(.defaultAction)
                     .disabled(state.isGenerating)
             }
@@ -131,35 +131,35 @@ struct FileToolsView: View {
 
     private var splitForm: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Split a file into ordered parts named name.001, name.002, …")
+            Text(L.t("Split a file into ordered parts named name.001, name.002, …"))
                 .font(.caption)
                 .foregroundColor(.secondary)
 
             row("Source") {
-                TextField("source file", text: $state.splitSource)
+                TextField(L.t("source file"), text: $state.splitSource)
                     .textFieldStyle(.roundedBorder)
                     .font(.system(.body, design: .monospaced))
                     .disabled(state.isSplitting)
-                Button("File…") { state.chooseSplitSource() }.disabled(state.isSplitting)
+                Button(L.t("File…")) { state.chooseSplitSource() }.disabled(state.isSplitting)
             }
 
             row("Destination") {
-                TextField("folder for the parts", text: $state.splitFolder)
+                TextField(L.t("folder for the parts"), text: $state.splitFolder)
                     .textFieldStyle(.roundedBorder)
                     .font(.system(.body, design: .monospaced))
                     .disabled(state.isSplitting)
-                Button("Folder…") { state.chooseSplitFolder() }.disabled(state.isSplitting)
+                Button(L.t("Folder…")) { state.chooseSplitFolder() }.disabled(state.isSplitting)
             }
 
             row("Base name") {
-                TextField("derived from source when empty", text: $state.splitBaseName)
+                TextField(L.t("derived from source when empty"), text: $state.splitBaseName)
                     .textFieldStyle(.roundedBorder)
                     .font(.system(.body, design: .monospaced))
                     .disabled(state.isSplitting)
             }
 
             row("Split by") {
-                Picker("", selection: $state.splitMode) {
+                Picker(L.t(""), selection: $state.splitMode) {
                     ForEach(FileSplitMode.allCases) { mode in
                         Text(mode.rawValue).tag(mode)
                     }
@@ -169,7 +169,7 @@ struct FileToolsView: View {
                 .disabled(state.isSplitting)
 
                 if state.splitMode == .bySize {
-                    Picker("", selection: $state.splitPartSize) {
+                    Picker(L.t(""), selection: $state.splitPartSize) {
                         ForEach(Self.sizeChoices) { choice in
                             Text(choice.id).tag(choice.bytes)
                         }
@@ -178,7 +178,7 @@ struct FileToolsView: View {
                     .frame(width: 160)
                     .disabled(state.isSplitting)
                 } else {
-                    TextField("parts", text: $state.splitPartCountText)
+                    TextField(L.t("parts"), text: $state.splitPartCountText)
                         .textFieldStyle(.roundedBorder)
                         .font(.system(.body, design: .monospaced))
                         .frame(width: 90)
@@ -193,10 +193,10 @@ struct FileToolsView: View {
 
             HStack {
                 if state.isSplitting {
-                    Button("Cancel") { state.cancelSplit() }
+                    Button(L.t("Cancel")) { state.cancelSplit() }
                 }
                 Spacer()
-                Button("Start Split") { state.startSplit() }
+                Button(L.t("Start Split")) { state.startSplit() }
                     .keyboardShortcut(.defaultAction)
                     .disabled(state.isSplitting)
             }
@@ -207,34 +207,34 @@ struct FileToolsView: View {
 
     private var joinForm: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Join ordered parts back into a single output file.")
+            Text(L.t("Join ordered parts back into a single output file."))
                 .font(.caption)
                 .foregroundColor(.secondary)
 
             row("Parts folder") {
-                TextField("folder containing the parts", text: $state.joinInputFolder)
+                TextField(L.t("folder containing the parts"), text: $state.joinInputFolder)
                     .textFieldStyle(.roundedBorder)
                     .font(.system(.body, design: .monospaced))
                     .disabled(state.isJoining)
-                Button("Folder…") { state.chooseJoinFolder() }.disabled(state.isJoining)
-                Button("Scan") { state.scanJoinFolder() }.disabled(state.isJoining)
+                Button(L.t("Folder…")) { state.chooseJoinFolder() }.disabled(state.isJoining)
+                Button(L.t("Scan")) { state.scanJoinFolder() }.disabled(state.isJoining)
             }
 
             row("Parts") {
-                Button("Add Parts…") { state.chooseJoinParts() }.disabled(state.isJoining)
-                Button("Clear") { state.clearJoinParts() }.disabled(state.isJoining)
+                Button(L.t("Add Parts…")) { state.chooseJoinParts() }.disabled(state.isJoining)
+                Button(L.t("Clear")) { state.clearJoinParts() }.disabled(state.isJoining)
                 Spacer()
-                Text("\(state.joinFilePaths.count) queued")
+                Text(L.f("%d queued", state.joinFilePaths.count))
                     .font(.caption)
                     .foregroundColor(.secondary)
             }
 
             row("Output") {
-                TextField("output file", text: $state.joinDestination)
+                TextField(L.t("output file"), text: $state.joinDestination)
                     .textFieldStyle(.roundedBorder)
                     .font(.system(.body, design: .monospaced))
                     .disabled(state.isJoining)
-                Button("File…") { state.chooseJoinDestination() }.disabled(state.isJoining)
+                Button(L.t("File…")) { state.chooseJoinDestination() }.disabled(state.isJoining)
             }
 
             ScrollView {
@@ -267,10 +267,10 @@ struct FileToolsView: View {
 
             HStack {
                 if state.isJoining {
-                    Button("Cancel") { state.cancelJoin() }
+                    Button(L.t("Cancel")) { state.cancelJoin() }
                 }
                 Spacer()
-                Button("Start Join") { state.startJoin() }
+                Button(L.t("Start Join")) { state.startJoin() }
                     .keyboardShortcut(.defaultAction)
                     .disabled(state.isJoining)
             }

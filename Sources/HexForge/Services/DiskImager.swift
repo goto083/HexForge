@@ -57,13 +57,13 @@ enum DiskImager {
 
         var errorDescription: String? {
             switch self {
-            case .sourceUnreadable(let path):      return "Cannot read source: \(path)"
-            case .destinationUnwritable(let path): return "Cannot write: \(path)"
-            case .cancelled:                       return "Imaging cancelled."
-            case .compressionFailed:               return "Compression failed."
+            case .sourceUnreadable(let path):      return L.f("Cannot read source: %@", path)
+            case .destinationUnwritable(let path): return L.f("Cannot write: %@", path)
+            case .cancelled:                       return L.t("Imaging cancelled.")
+            case .compressionFailed:               return L.t("Compression failed.")
             case .verifyMismatch(let offset):
-                return "Verification failed at offset 0x\(String(offset, radix: 16).uppercased())."
-            case .manifestUnreadable(let path):    return "Cannot read manifest: \(path)"
+                return L.f("Verification failed at offset 0x%@.", String(offset, radix: 16).uppercased())
+            case .manifestUnreadable(let path):    return L.f("Cannot read manifest: %@", path)
             }
         }
     }

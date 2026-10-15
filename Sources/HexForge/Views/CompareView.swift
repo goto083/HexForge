@@ -6,20 +6,20 @@ struct CompareView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("Compare With File").font(.headline)
+            Text(L.t("Compare With File")).font(.headline)
 
-            Text("Compares the open document against another file and marks every differing byte.")
+            Text(L.t("Compares the open document against another file and marks every differing byte."))
                 .font(.caption)
                 .foregroundColor(.secondary)
 
             HStack {
-                Text("File")
+                Text(L.t("File"))
                     .frame(width: 70, alignment: .leading)
-                TextField("path to the file to compare against", text: $state.comparePath)
+                TextField(L.t("path to the file to compare against"), text: $state.comparePath)
                     .textFieldStyle(.roundedBorder)
                     .font(.system(.body, design: .monospaced))
                     .disabled(state.isComparing)
-                Button("Browse…") { state.chooseCompareFile() }
+                Button(L.t("Browse…")) { state.chooseCompareFile() }
                     .disabled(state.isComparing)
             }
 
@@ -27,7 +27,7 @@ struct CompareView: View {
                 Text(state.document.fileName)
                     .font(.system(size: 11, design: .monospaced))
                     .foregroundColor(.secondary)
-                Text("vs")
+                Text(L.t("vs"))
                     .font(.system(size: 11))
                     .foregroundColor(.secondary)
                 Text(state.comparePath.isEmpty ? "—" : (state.comparePath as NSString).lastPathComponent)
@@ -48,12 +48,12 @@ struct CompareView: View {
             }
 
             HStack(spacing: 8) {
-                Button("Previous Diff") { state.gotoPreviousDifference() }
+                Button(L.t("Previous Diff")) { state.gotoPreviousDifference() }
                     .disabled(state.compareDifferences.isEmpty)
-                Button("Next Diff") { state.gotoNextDifference() }
+                Button(L.t("Next Diff")) { state.gotoNextDifference() }
                     .disabled(state.compareDifferences.isEmpty)
                 Spacer()
-                Button("Clear") { state.clearCompare() }
+                Button(L.t("Clear")) { state.clearCompare() }
                     .disabled(state.compareDifferences.isEmpty && state.compareSummary.isEmpty)
             }
 
@@ -108,13 +108,13 @@ struct CompareView: View {
 
             HStack {
                 if state.isComparing {
-                    Button("Cancel") { state.cancelCompare() }
+                    Button(L.t("Cancel")) { state.cancelCompare() }
                 }
                 Spacer()
-                Button("Close") { dismiss() }
+                Button(L.t("Close")) { dismiss() }
                     .keyboardShortcut(.cancelAction)
                     .disabled(state.isComparing)
-                Button("Compare") { state.runCompare() }
+                Button(L.t("Compare")) { state.runCompare() }
                     .keyboardShortcut(.defaultAction)
                     .disabled(state.isComparing || state.comparePath.isEmpty)
             }

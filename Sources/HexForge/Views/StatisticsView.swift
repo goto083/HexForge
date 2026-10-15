@@ -8,15 +8,15 @@ struct StatisticsView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Byte Statistics & Histogram").font(.headline)
-            Text("Counts how often each of the 256 byte values occurs across the selection or the whole file.")
+            Text(L.t("Byte Statistics & Histogram")).font(.headline)
+            Text(L.t("Counts how often each of the 256 byte values occurs across the selection or the whole file."))
                 .font(.caption)
                 .foregroundColor(.secondary)
 
             HStack(spacing: 12) {
-                Picker("Scope", selection: $state.statisticsScopeIsSelection) {
-                    Text("Whole file").tag(false)
-                    Text("Selection").tag(true)
+                Picker(L.t("Scope"), selection: $state.statisticsScopeIsSelection) {
+                    Text(L.t("Whole file")).tag(false)
+                    Text(L.t("Selection")).tag(true)
                 }
                 .pickerStyle(.segmented)
                 .disabled(!state.hasSelection)
@@ -25,7 +25,7 @@ struct StatisticsView: View {
                 Button {
                     state.computeStatistics(overSelection: state.statisticsScopeIsSelection)
                 } label: {
-                    Label("Analyse", systemImage: "chart.bar.fill")
+                    Label(L.t("Analyse"), systemImage: "chart.bar.fill")
                 }
                 .disabled(!state.hasContent || state.isComputingStatistics)
 
@@ -33,7 +33,7 @@ struct StatisticsView: View {
                     ProgressView().controlSize(.small)
                 }
                 Spacer()
-                Button("Close") { dismiss() }.keyboardShortcut(.cancelAction)
+                Button(L.t("Close")) { dismiss() }.keyboardShortcut(.cancelAction)
             }
 
             if !state.statisticsStatus.isEmpty {
@@ -90,7 +90,7 @@ struct StatisticsView: View {
     private var histogram: some View {
         let s = state.statistics
         return VStack(alignment: .leading, spacing: 6) {
-            Text("Histogram — 0x00 to 0xFF").font(.caption).foregroundColor(Color.secondary)
+            Text(L.t("Histogram — 0x00 to 0xFF")).font(.caption).foregroundColor(Color.secondary)
             LazyVGrid(columns: columns, spacing: 3) {
                 ForEach(0..<256, id: \.self) { value in
                     cell(value, stats: s)
@@ -124,7 +124,7 @@ struct StatisticsView: View {
     private var topList: some View {
         let items = state.statistics.mostFrequent(limit: 10)
         return VStack(alignment: .leading, spacing: 6) {
-            Text("Most frequent byte values").font(.caption).foregroundColor(Color.secondary)
+            Text(L.t("Most frequent byte values")).font(.caption).foregroundColor(Color.secondary)
             ForEach(items) { f in
                 HStack(spacing: 10) {
                     Text(String(format: "0x%02X", f.value))
