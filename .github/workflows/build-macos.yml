@@ -1,0 +1,44 @@
+name: Build macOS App
+
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-14
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build release (universal arm64 + x86_64)
+        run: swift build -c release --arch arm64 --arch x86_64
+
+      - name: Assemble HexForge.app
+        run: |
+          BIN_DIR=$(swift build -c release --arch arm64 --arch x86_64 --show-bin-path)
+          APP=HexForge.app
+          mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
+          cp "$BIN_DIR/HexForge" "$APP/Contents/MacOS/HexForge"
+          cp packaging/Info.plist "$APP/Contents/Info.plist"
+          chmod +x "$APP/Contents/MacOS/HexForge"
+
+      - name: Ad-hoc codesign
+        run: codesign --force --deep --sign - HexForge.app
+
+      - name: Verify bundle
+        run: |
+          file HexForge.app/Contents/MacOS/HexForge
+          codesign --verify --verbose HexForge.app
+
+      - name: Zip
+        run: ditto -c -k --sequesterRsrc --keepParent HexForge.app HexForge.zip
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: HexForge-macos
+          path: HexForge.zip
+          retention-days: 14
