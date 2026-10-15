@@ -55,7 +55,9 @@ enum SearchEngine {
         case .hex:
             guard let parsed = BytePattern.parseHex(options.hexText) else { return nil }
             guard let wildcard = options.wildcardByte else { return parsed }
-            return BytePattern(bytes: parsed.bytes.map { $0 == wildcard ? nil : $0 })
+            return BytePattern(bytes: parsed.bytes.map { byte -> UInt8? in
+                byte == wildcard ? nil : byte
+            })
         }
     }
 
