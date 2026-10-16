@@ -13,7 +13,7 @@ struct ContentView: View {
                 Divider()
                 if state.showFileSystem {
                     FileSystemView(browser: state.fsBrowser)
-                        .frame(height: 220)
+                        .frame(height: 260)
                     Divider()
                 }
                 if state.showHitList && !state.searchResults.isEmpty {
