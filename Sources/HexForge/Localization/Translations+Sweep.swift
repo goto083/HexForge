@@ -79,6 +79,7 @@ extension L10n {
 
         // File system info panel
         "Logical sector": "逻辑扇区号",
+        "Physical sector": "物理扇区号",
         "Outside volume": "卷外",
         "Owned by": "所属文件",
         "Parent chain": "完整父目录链",

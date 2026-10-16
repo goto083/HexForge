@@ -67,16 +67,21 @@ struct SearchResultsView: View {
                     ForEach(state.searchResults.indices, id: \.self) { index in
                         let hit = state.searchResults[index]
                         let selected = state.selectedHitOffset == hit.offset
+                        // Volume-relative address (DBR = 0) once a file system
+                        // is parsed; hits before the DBR keep absolute offsets.
+                        let rel = hit.offset - state.displayBase
+                        let hexText = "0x" + String(rel >= 0 ? rel : hit.offset, radix: 16).uppercased()
+                        let decText = "\(rel >= 0 ? rel : hit.offset)"
                         Button {
                             state.jumpToSearchHit(hit)
                         } label: {
                             HStack(spacing: 0) {
                                 Text("\(index + 1)")
                                     .frame(width: 56, alignment: .trailing)
-                                Text("0x" + String(hit.offset, radix: 16).uppercased())
+                                Text(hexText)
                                     .frame(width: 110, alignment: .leading)
                                     .padding(.leading, 12)
-                                Text("\(hit.offset)")
+                                Text(decText)
                                     .frame(width: 110, alignment: .leading)
                                 Text(state.searchHitPreview(hit))
                                     .frame(maxWidth: .infinity, alignment: .leading)

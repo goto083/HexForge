@@ -48,9 +48,15 @@ struct FSInfoPanelView: View {
             let cluster = volume.clusterNumber(atOffset: probeOffset)
             let systemArea = cluster == nil ? volume.systemAreaName(atOffset: probeOffset) : nil
             let owner = browser.owner(atOffset: probeOffset)
+            // Logical = volume-relative (DBR = 0); physical = from the disk start.
+            let relative = probeOffset - state.displayBase
+            let bps = max(1, info.bytesPerSector)
 
-            line(L.t("Offset"), "0x" + String(probeOffset, radix: 16).uppercased() + "  ·  \(probeOffset)", mono: true)
-            line(L.t("Logical sector"), "\(probeOffset / max(1, info.bytesPerSector))", mono: true)
+            line(L.t("Offset"), relative >= 0
+                 ? "0x" + String(relative, radix: 16).uppercased() + "  ·  \(relative)"
+                 : "0x" + String(probeOffset, radix: 16).uppercased() + "  ·  \(probeOffset)", mono: true)
+            line(L.t("Logical sector"), relative >= 0 ? "\(relative / bps)" : "—", mono: true)
+            line(L.t("Physical sector"), "\(probeOffset / bps)", mono: true)
 
             if let cluster {
                 line(L.t("Cluster"), "\(cluster)", mono: true, accent: .primary)

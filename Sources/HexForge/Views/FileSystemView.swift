@@ -325,7 +325,7 @@ struct ClusterListView: View {
                                             .font(.system(.body, design: .monospaced))
                                             .frame(width: 110, alignment: .leading)
                                         if let volume = browser.volume {
-                                            let offset = volume.base + volume.info.clusterOffset(cluster)
+                                            let offset = volume.info.clusterOffset(cluster)
                                             Text("0x" + String(offset, radix: 16).uppercased())
                                                 .font(.system(.body, design: .monospaced))
                                                 .foregroundColor(.secondary)

@@ -240,6 +240,11 @@ final class AppState: ObservableObject {
     /// Byte offset chosen by the last mouse click, for the info panel. Hovering
     /// or moving the caret with the keyboard deliberately does not update it.
     @Published var selectedOffset: Int? = nil
+
+    /// Byte offset the UI addresses are displayed from: 0 normally, the volume's
+    /// boot sector once a file system is parsed (DBR = sector 0, the MBR area
+    /// before it is not addressed).
+    var displayBase: Int { showFileSystem ? (fsBrowser.volume?.base ?? 0) : 0 }
     /// true = decimal offsets and 0-15 column headers in the hex view.
     @Published var decimalAddress = false
 

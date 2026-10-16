@@ -65,10 +65,19 @@ struct FSVolumeInfo {
     let heapStartSector: Int     // first data cluster, in sectors
     let rootCluster: UInt32
     let totalClusters: UInt32
+    /// Volume length in sectors from the boot sector (0 = unknown).
+    let totalSectors: Int
 
     var clusterSize: Int { bytesPerSector * sectorsPerCluster }
     var fatOffset: Int { fatStartSector * bytesPerSector }
     var fatLength: Int { sectorsPerFAT * bytesPerSector }
+
+    /// Volume length in bytes (falls back to the data-area extent).
+    var volumeLength: Int {
+        totalSectors > 0
+            ? totalSectors * bytesPerSector
+            : (heapStartSector + Int(totalClusters) * sectorsPerCluster) * bytesPerSector
+    }
 
     func clusterOffset(_ cluster: UInt32) -> Int {
         (heapStartSector + Int(cluster &- 2) * sectorsPerCluster) * bytesPerSector
@@ -83,6 +92,9 @@ struct FSVolume {
     /// Byte offset of the volume's boot sector: 0 for a bare file system,
     /// or the partition start when reached through an MBR partition table.
     let base: Int
+
+    /// Absolute byte offset just past the volume's last sector.
+    var endOffset: Int { base + info.volumeLength }
 
     // MARK: - Detection
 
@@ -119,7 +131,8 @@ struct FSVolume {
                 fatCount: Int(boot[0x6E]),
                 heapStartSector: Int(u32(boot, 0x58)),
                 rootCluster: u32(boot, 0x60),
-                totalClusters: u32(boot, 0x5C))
+                totalClusters: u32(boot, 0x5C),
+                totalSectors: Int(u64(boot, 0x48)))
             guard info.sectorsPerFAT > 0, info.heapStartSector > 0, info.rootCluster >= 2 else { return nil }
             return FSVolume(info: info, document: document, base: base)
         }
@@ -146,7 +159,8 @@ struct FSVolume {
             fatCount: fats,
             heapStartSector: heapStart,
             rootCluster: rootClus,
-            totalClusters: totalSectors > heapStart ? UInt32((totalSectors - heapStart) / spc) : 0)
+            totalClusters: totalSectors > heapStart ? UInt32((totalSectors - heapStart) / spc) : 0,
+            totalSectors: totalSectors)
         return FSVolume(info: info, document: document, base: base)
     }
 

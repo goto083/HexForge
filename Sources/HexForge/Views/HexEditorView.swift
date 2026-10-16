@@ -83,9 +83,11 @@ final class HexCanvasView: NSView {
     private var addressUnit: Int { max(1, state?.addressUnit ?? 1) }
     private var addressPrefix: String { state?.addressPrefix ?? "" }
     private var addressDigits: Int { max(8, state?.addressDigits ?? 8) }
+    /// Display origin: 0 normally, the volume DBR once a file system is parsed.
+    private var displayBase: Int { state?.displayBase ?? 0 }
     /// Decimal digits for the offset column (WinHex shows 10 digits).
     private var decimalDigits: Int {
-        let units = max(1, (state?.size ?? 0) / addressUnit)
+        let units = max(1, ((state?.size ?? 0) - displayBase) / addressUnit)
         return max(10, String(units).count)
     }
     /// Digit count actually used, depending on hex/decimal addressing.
@@ -229,14 +231,17 @@ final class HexCanvasView: NSView {
 
             // Mark sector (and more strongly, cluster) boundaries. The parsed
             // file system's geometry wins over the manual sector/cluster sizing.
+            // Boundaries are volume-relative (DBR = sector 0); the MBR area
+            // before the volume gets none.
             let sectorStep = state.fsSectorSize > 0
                 ? state.fsSectorSize
                 : (state.addressMode != .fileOffset ? state.sectorSize : 0)
             let clusterStep = state.fsClusterSize > 0
                 ? state.fsClusterSize
                 : (state.addressMode != .fileOffset ? state.clusterSize : 0)
-            if row > 0, sectorStep > 0, base % sectorStep == 0 {
-                let isClusterStart = clusterStep > 0 && base % clusterStep == 0
+            let relativeBase = base - displayBase
+            if row > 0, relativeBase >= 0, sectorStep > 0, relativeBase % sectorStep == 0 {
+                let isClusterStart = clusterStep > 0 && relativeBase % clusterStep == 0
                 NSColor(calibratedWhite: 1.0, alpha: isClusterStart ? 0.35 : 0.16).setFill()
                 NSRect(x: 0, y: y, width: bounds.width, height: isClusterStart ? 2 : 1).fill()
             }
@@ -303,8 +308,12 @@ final class HexCanvasView: NSView {
         }
     }
 
+    /// Volume-relative address text. Rows before the DBR (the MBR area of a
+    /// disk) have no volume address and are shown without an offset.
     private func addressText(_ byteOffset: Int) -> String {
-        let value = byteOffset / addressUnit
+        let relative = byteOffset - displayBase
+        guard relative >= 0 else { return "" }
+        let value = relative / addressUnit
         if state?.decimalAddress == true {
             return addressPrefix + paddedDecimal(value, width: decimalDigits)
         }

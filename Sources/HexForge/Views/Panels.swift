@@ -61,9 +61,9 @@ struct FindView: View {
 
 // MARK: - Goto sector (⌃G)
 
-/// WinHex-style “Goto Sector” box: enter a decimal sector number and see the
-/// cluster it maps to. Logical and physical addressing resolve to the same byte
-/// offset for files and disk images.
+/// WinHex-style “Goto Sector” box: a decimal sector number. Logical sectors
+/// count from the volume's DBR (sector 0) once a file system is parsed;
+/// physical sectors count from the start of the disk/file.
 struct GotoSectorView: View {
     @EnvironmentObject var state: AppState
     @Environment(\.dismiss) private var dismiss
@@ -75,14 +75,19 @@ struct GotoSectorView: View {
     private var sectorSize: Int {
         state.fsSectorSize > 0 ? state.fsSectorSize : max(1, state.sectorSize)
     }
-    private var sectorsPerCluster: Int {
-        if state.fsSectorSize > 0, state.fsClusterSize > 0 {
-            return max(1, state.fsClusterSize / state.fsSectorSize)
-        }
-        return max(1, state.sectorsPerCluster)
-    }
+    private var volumeBase: Int { state.displayBase }
     private var sector: Int? {
         Int(text.trimmingCharacters(in: .whitespacesAndNewlines))
+    }
+    /// Volume cluster the logical sector falls into (needs a parsed file system).
+    private var clusterText: String {
+        guard !physical, let sector, sector >= 0,
+              state.showFileSystem,
+              let volume = state.fsBrowser.volume else { return "—" }
+        let info = volume.info
+        guard sector >= info.heapStartSector else { return "—" }
+        let cluster = 2 + (sector - info.heapStartSector) / max(1, info.sectorsPerCluster)
+        return cluster <= Int(info.totalClusters) + 1 ? "\(cluster)" : "—"
     }
 
     var body: some View {
@@ -108,7 +113,7 @@ struct GotoSectorView: View {
             HStack {
                 Text(L.t("= Cluster:"))
                     .frame(width: 90, alignment: .leading)
-                Text("\((sector ?? 0) / sectorsPerCluster)")
+                Text(clusterText)
                     .font(.system(.body, design: .monospaced))
                     .foregroundColor(.secondary)
             }
@@ -132,8 +137,8 @@ struct GotoSectorView: View {
             error = L.t("Invalid number.")
             return
         }
-        let offset = sector * sectorSize
-        guard offset < max(1, state.size) else {
+        let offset = (physical ? 0 : volumeBase) + sector * sectorSize
+        guard offset >= 0, offset < max(1, state.size) else {
             error = L.f("Offset beyond end of data (%d bytes).", state.size)
             return
         }
@@ -145,8 +150,8 @@ struct GotoSectorView: View {
 // MARK: - Goto offset (⌥G)
 
 /// WinHex-style “Goto Offset” box: a decimal value in bytes or sectors, taken
-/// relative to the beginning, the current position (forwards/backwards) or the
-/// end of the data (backwards).
+/// relative to the beginning (the volume DBR once a file system is parsed), the
+/// current position (forwards/backwards) or the end of the volume (backwards).
 struct GotoOffsetView: View {
     @EnvironmentObject var state: AppState
     @Environment(\.dismiss) private var dismiss
@@ -172,16 +177,22 @@ struct GotoOffsetView: View {
     private var unitFactor: Int {
         useSectors ? (state.fsSectorSize > 0 ? state.fsSectorSize : max(1, state.sectorSize)) : 1
     }
+    /// Addressing origin: the DBR once a file system is parsed, else byte 0.
+    private var startBase: Int { state.displayBase }
+    /// End reference: the volume's last sector when parsed, else the data end.
+    private var endBase: Int {
+        (state.showFileSystem ? state.fsBrowser.volume?.endOffset : nil) ?? state.size
+    }
     private var value: Int? {
         Int(text.trimmingCharacters(in: .whitespacesAndNewlines))
     }
     private var result: Int {
         let amount = (value ?? 0) * unitFactor
         switch relative {
-        case .beginning:       return amount
+        case .beginning:       return startBase + amount
         case .current:         return state.cursor + amount
         case .currentBackward: return state.cursor - amount
-        case .endBackward:     return max(0, state.size - amount)
+        case .endBackward:     return max(startBase, endBase - amount)
         }
     }
 
@@ -221,7 +232,7 @@ struct GotoOffsetView: View {
                 .labelsHidden()
             }
 
-            Text(L.f("Result: %d", result))
+            Text(L.f("Result: %d", result - startBase))
                 .font(.caption)
                 .foregroundColor(.secondary)
 

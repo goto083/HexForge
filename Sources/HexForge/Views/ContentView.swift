@@ -151,8 +151,21 @@ struct StatusBarView: View {
     private var sectorSize: Int {
         state.fsSectorSize > 0 ? state.fsSectorSize : max(1, state.sectorSize)
     }
-    private var totalSectors: Int { (state.size + sectorSize - 1) / sectorSize }
-    private var clickedSector: Int? { state.selectedOffset.map { $0 / sectorSize } }
+    private var totalSectors: Int {
+        if state.showFileSystem, let volume = state.fsBrowser.volume {
+            let n = volume.info.volumeLength / sectorSize
+            if n > 0 { return n }
+        }
+        return (state.size + sectorSize - 1) / sectorSize
+    }
+    /// Logical (volume-relative) sector of the last clicked byte; nil before
+    /// the DBR or before anything was clicked.
+    private var clickedSector: Int? {
+        state.selectedOffset.flatMap { offset -> Int? in
+            let relative = offset - state.displayBase
+            return relative >= 0 ? relative / sectorSize : nil
+        }
+    }
 
     private func grouped(_ value: Int) -> String {
         value.formatted(.number.grouping(.automatic))
