@@ -147,18 +147,31 @@ struct TopBarView: View {
 struct StatusBarView: View {
     @EnvironmentObject var state: AppState
 
+    /// Sector size from the parsed file system wins over the manual setting.
+    private var sectorSize: Int {
+        state.fsSectorSize > 0 ? state.fsSectorSize : max(1, state.sectorSize)
+    }
+    private var totalSectors: Int { (state.size + sectorSize - 1) / sectorSize }
+    private var clickedSector: Int? { state.selectedOffset.map { $0 / sectorSize } }
+
+    private func grouped(_ value: Int) -> String {
+        value.formatted(.number.grouping(.automatic))
+    }
+
     var body: some View {
         HStack(spacing: 16) {
-            Text(L.f("Offset: 0x%@", String(state.cursor, radix: 16).uppercased()))
+            // Sector of the last *clicked* byte — keyboard caret moves do not
+            // update it (WinHex-style readout), decimal with thousands separators.
+            Text(L.f("Sector: %@ / %@",
+                     clickedSector.map(grouped) ?? "—",
+                     grouped(totalSectors)))
                 .font(.system(.body, design: .monospaced))
-            Text(L.f("Cursor: %d", state.cursor))
-                .font(.system(.body, design: .monospaced))
-            if state.addressMode != .fileOffset {
-                Text(L.f("Sector: %d  ·  Cluster: %d", state.cursorSector, state.cursorCluster))
-                    .font(.system(.body, design: .monospaced))
-            }
             if state.hasSelection {
-                Text(L.f("Sel: %d byte(s)", state.selectionLength))
+                let lo = min(state.cursor, state.anchor)
+                let hi = max(state.cursor, state.anchor)
+                Text(L.f("Block: %@ - %@", grouped(lo), grouped(hi + 1)))
+                    .font(.system(.body, design: .monospaced))
+                Text(L.f("Block size: %d", state.selectionLength))
                     .font(.system(.body, design: .monospaced))
             }
             Text(L.f("Size: %@ (%d bytes)", state.byteCountString(state.size), state.size))

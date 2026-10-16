@@ -256,16 +256,44 @@ struct FileSystemView: View {
 
 // MARK: - Cluster chain sheet
 
-/// Navigate → List Clusters. Click a cluster to jump to it in the hex view.
+/// Navigate → List Clusters. Shows the file's FAT chain; contiguous runs are
+/// collapsed to their first and last cluster with an "omitted" line between
+/// (WinHex's shortened cluster list), plus the fragmentation count.
+/// Click a cluster to jump to it in the hex view.
 struct ClusterListView: View {
     @EnvironmentObject var state: AppState
     @ObservedObject var browser: FileSystemBrowser
     @Environment(\.dismiss) private var dismiss
 
+    @State private var shorten = true
+
+    private enum Row {
+        case cluster(UInt32)
+        case omitted(Int)
+    }
+
+    /// Display rows: per contiguous run, first cluster … omitted … last cluster.
+    private var rows: [Row] {
+        if !shorten || browser.clusterSpans.isEmpty {
+            return browser.clusterList.map { .cluster($0) }
+        }
+        var rows: [Row] = []
+        for span in browser.clusterSpans {
+            if span.count <= 2 {
+                for k in 0..<Int(span.count) { rows.append(.cluster(span.start + UInt32(k))) }
+            } else {
+                rows.append(.cluster(span.start))
+                rows.append(.omitted(Int(span.count) - 2))
+                rows.append(.cluster(span.start + span.count - 1))
+            }
+        }
+        return rows
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             HStack {
-                Text(L.f("Clusters of %@", browser.clusterListEntry?.name ?? ""))
+                Text(browser.clusterListEntry?.name ?? L.t("Clusters"))
                     .font(.headline)
                 Spacer()
                 Text(L.f("%d of %d cluster(s)", browser.clusterList.count, browser.clusterListTotal))
@@ -274,7 +302,7 @@ struct ClusterListView: View {
             }
             .padding(12)
             Divider()
-            if browser.clusterList.isEmpty {
+            if browser.clusterList.isEmpty && browser.clusterSpans.isEmpty {
                 Spacer()
                 Text(L.t("No cluster chain available (entry may be deleted)."))
                     .font(.callout)
@@ -284,45 +312,87 @@ struct ClusterListView: View {
             } else {
                 ScrollView {
                     LazyVStack(spacing: 0) {
-                        ForEach(Array(browser.clusterList.enumerated()), id: \.offset) { index, cluster in
-                            Button {
-                                browser.jumpToCluster(cluster, using: state)
-                            } label: {
-                                HStack {
-                                    Text("\(index + 1)")
-                                        .foregroundColor(.secondary)
-                                        .frame(width: 60, alignment: .trailing)
-                                    Text("\(cluster)")
-                                        .font(.system(.body, design: .monospaced))
-                                        .frame(width: 120, alignment: .leading)
-                                        .padding(.leading, 12)
-                                    if let volume = browser.volume {
-                                        let offset = volume.base + volume.info.clusterOffset(cluster)
-                                        Text("0x" + String(offset, radix: 16).uppercased())
-                                            .font(.system(.body, design: .monospaced))
+                        ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
+                            switch row {
+                            case .cluster(let cluster):
+                                Button {
+                                    browser.jumpToCluster(cluster, using: state)
+                                } label: {
+                                    HStack {
+                                        Text(L.t("Cluster"))
                                             .foregroundColor(.secondary)
+                                        Text("\(cluster)")
+                                            .font(.system(.body, design: .monospaced))
+                                            .frame(width: 110, alignment: .leading)
+                                        if let volume = browser.volume {
+                                            let offset = volume.base + volume.info.clusterOffset(cluster)
+                                            Text("0x" + String(offset, radix: 16).uppercased())
+                                                .font(.system(.body, design: .monospaced))
+                                                .foregroundColor(.secondary)
+                                        }
+                                        Spacer()
                                     }
+                                    .padding(.horizontal, 12)
+                                    .padding(.vertical, 3)
+                                    .contentShape(Rectangle())
+                                }
+                                .buttonStyle(.plain)
+                                .foregroundColor(.primary)
+                                Divider().padding(.leading, 12)
+                            case .omitted(let count):
+                                HStack {
+                                    Text(L.f("… %d contiguous cluster(s) omitted", count))
+                                        .font(.system(.body, design: .monospaced))
+                                        .foregroundColor(.secondary)
+                                        .frame(width: 110, alignment: .trailing)
                                     Spacer()
                                 }
                                 .padding(.horizontal, 12)
                                 .padding(.vertical, 3)
-                                .contentShape(Rectangle())
                             }
-                            .buttonStyle(.plain)
-                            .foregroundColor(.primary)
-                            Divider().padding(.leading, 12)
                         }
                     }
                 }
             }
             Divider()
-            HStack {
+            HStack(spacing: 12) {
+                Text(L.f("Fragments: %d", browser.clusterSpans.count))
+                    .foregroundColor(.secondary)
+                Toggle(L.t("Shorten contiguous clusters"), isOn: $shorten)
+                    .toggleStyle(.checkbox)
+                    .font(.caption)
                 Spacer()
+                Button(L.t("Copy list to text file…"), action: copyList)
                 Button(L.t("Close")) { dismiss() }
                     .keyboardShortcut(.defaultAction)
             }
+            .font(.system(size: 11))
             .padding(10)
         }
-        .frame(width: 420, height: 360)
+        .frame(width: 460, height: 400)
+    }
+
+    /// Writes the chain exactly as displayed (shortening respected) to a text file.
+    private func copyList() {
+        let panel = NSSavePanel()
+        panel.nameString = (browser.clusterListEntry?.name ?? "clusters") + " clusters.txt"
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+
+        var lines: [String] = []
+        if let name = browser.clusterListEntry?.name {
+            lines.append(name)
+        }
+        for row in rows {
+            switch row {
+            case .cluster(let cluster):
+                lines.append("\(L.t("Cluster")) \(cluster)")
+            case .omitted(let count):
+                lines.append(L.f("… %d contiguous cluster(s) omitted", count))
+            }
+        }
+        lines.append(L.f("Fragments: %d", browser.clusterSpans.count))
+        lines.append(L.f("%d of %d cluster(s)", browser.clusterList.count, browser.clusterListTotal))
+        try? lines.joined(separator: "\n").write(to: url, atomically: true, encoding: .utf8)
+        state.statusMessage = L.t("Cluster list saved.")
     }
 }

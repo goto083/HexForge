@@ -761,6 +761,8 @@ final class FileSystemBrowser: ObservableObject {
     @Published var clusterListEntry: FSEntry?
     @Published var clusterList: [UInt32] = []
     @Published var clusterListTotal = 0
+    /// Contiguous runs of the listed chain (drives the shortened view).
+    @Published var clusterSpans: [ClusterSpan] = []
     /// Cluster → file reverse index, filled in by a background tree scan.
     @Published private(set) var owners: [OwnerSpan] = []
     @Published private(set) var scanning = false
@@ -941,13 +943,16 @@ final class FileSystemBrowser: ObservableObject {
 
     /// Navigate → build the cluster-chain list (shown in a sheet).
     func listClusters(_ entry: FSEntry) {
+        clusterListEntry = entry
         guard let volume, entry.firstCluster >= 2 else {
-            clusterListEntry = entry
             clusterList = []
+            clusterListTotal = 0
+            clusterSpans = []
             return
         }
         clusterList = volume.clusterChain(for: entry)
         clusterListTotal = volume.clusterChainLength(for: entry)
+        clusterSpans = volume.clusterSpans(for: entry)
     }
 
     /// Cluster → owning file lookup, via binary search over the sorted index.
