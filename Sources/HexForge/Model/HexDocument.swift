@@ -81,7 +81,7 @@ final class DeviceIO {
     /// `hintedLength` (from DiskArbitration) is preferred; the block-count
     /// ioctl is only consulted when it is missing.
     static func open(path: String, hintedLength: Int) -> DeviceIO? {
-        let fd = open(path, O_RDONLY)
+        let fd = Darwin.open(path, O_RDONLY)
         guard fd >= 0 else { return nil }
 
         var blockSize: UInt32 = 512
@@ -100,7 +100,7 @@ final class DeviceIO {
         return DeviceIO(fd: fd, path: path, sectorSize: sectors, mediaLength: length)
     }
 
-    deinit { close(fd) }
+    deinit { Darwin.close(fd) }
 
     /// Reads an arbitrary range (any alignment). A short read at media end
     /// returns just the available bytes.
