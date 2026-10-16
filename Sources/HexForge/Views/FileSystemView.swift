@@ -61,10 +61,7 @@ struct FileSystemView: View {
 
             Image(systemName: "folder")
                 .foregroundColor(.secondary)
-            Text("/" + browser.pathNames.joined(separator: "/"))
-                .font(.subheadline)
-                .lineLimit(1)
-                .truncationMode(.head)
+            breadcrumb
             if !browser.status.isEmpty {
                 Text(browser.status)
                     .font(.caption)
@@ -78,6 +75,33 @@ struct FileSystemView: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 6)
+    }
+
+    /// Clickable path: every segment jumps straight to that ancestor directory.
+    private var breadcrumb: some View {
+        HStack(spacing: 2) {
+            Button {
+                browser.go(toLevel: 0, using: state)
+            } label: {
+                Text(browser.label.isEmpty ? L.t("Root directory") : browser.label)
+                    .font(.subheadline)
+            }
+            .buttonStyle(.borderless)
+
+            ForEach(browser.pathNames.indices, id: \.self) { idx in
+                Text("/")
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+                Button {
+                    browser.go(toLevel: idx + 1, using: state)
+                } label: {
+                    Text(browser.pathNames[idx])
+                        .font(.subheadline)
+                }
+                .buttonStyle(.borderless)
+            }
+        }
+        .lineLimit(1)
     }
 
     // MARK: Volume summary
@@ -193,8 +217,15 @@ struct FileSystemView: View {
         .background(selected ? Color.accentColor.opacity(0.25) : Color.clear)
         .opacity(entry.isDeleted ? 0.55 : 1)
         .contentShape(Rectangle())
+        // Double-click opens; a single click selects, and the ".." row goes up.
         .onTapGesture(count: 2) { browser.openEntry(entry, using: state) }
-        .onTapGesture(count: 1) { browser.reveal(entry, using: state) }
+        .simultaneousGesture(TapGesture(count: 1).onEnded {
+            if entry.parentCluster != nil {
+                browser.openEntry(entry, using: state)
+            } else {
+                browser.reveal(entry, using: state)
+            }
+        })
         .contextMenu {
             Button(L.t("Open")) { browser.openEntry(entry, using: state) }
             Button(L.t("Recover / Copy…")) { browser.recover(entry, using: state) }

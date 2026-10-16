@@ -873,7 +873,9 @@ final class FileSystemBrowser: ObservableObject {
     }
 
     func enter(_ entry: FSEntry, using state: AppState) {
-        guard entry.isDirectory, entry.firstCluster >= 2 else { return }
+        guard entry.isDirectory, entry.firstCluster >= 2, entry.name != "." else { return }
+        // Guard against re-entering the directory we are already in (the "." row).
+        if clusterStack.last == entry.firstCluster { return }
         clusterStack.append(entry.firstCluster)
         pathNames.append(entry.name)
         reload(using: state)
@@ -883,6 +885,12 @@ final class FileSystemBrowser: ObservableObject {
     func goUp(using state: AppState) {
         guard clusterStack.count > 1 else { return }
         goUpTo(cluster: clusterStack[clusterStack.count - 2], using: state)
+    }
+
+    /// Jumps straight to an ancestor level (breadcrumb): 0 is the volume root.
+    func go(toLevel level: Int, using state: AppState) {
+        guard level >= 0, level < clusterStack.count else { return }
+        goUpTo(cluster: clusterStack[level], using: state)
     }
 
     /// Pops the navigation stack back to a recorded parent cluster.
