@@ -375,7 +375,7 @@ struct ClusterListView: View {
     /// Writes the chain exactly as displayed (shortening respected) to a text file.
     private func copyList() {
         let panel = NSSavePanel()
-        panel.nameString = (browser.clusterListEntry?.name ?? "clusters") + " clusters.txt"
+        panel.nameFieldStringValue = (browser.clusterListEntry?.name ?? "clusters") + " clusters.txt"
         guard panel.runModal() == .OK, let url = panel.url else { return }
 
         var lines: [String] = []
