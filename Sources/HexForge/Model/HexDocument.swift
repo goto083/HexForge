@@ -13,6 +13,273 @@ enum DocumentError: LocalizedError {
     }
 }
 
+/// Carries the technical reason a raw device could not be opened; the UI wraps
+/// it in a localized message.
+struct DeviceLoadError: LocalizedError {
+    let message: String
+    var errorDescription: String? { message }
+}
+
+// MARK: - Content backings
+
+/// Read access to the document's unedited bytes. Indirection is what lets a
+/// multi-GB raw disk be browsed without ever loading it all into memory.
+private protocol ContentBacking: AnyObject {
+    var count: Int { get }
+    func byte(at offset: Int) -> UInt8
+    func read(_ range: Range<Int>) -> [UInt8]
+}
+
+/// Ordinary files: a Data blob (usually memory-mapped via `.mappedIfSafe`).
+private final class DataBacking: ContentBacking {
+    let data: Data
+
+    init(_ data: Data) { self.data = data }
+
+    var count: Int { data.count }
+
+    func byte(at offset: Int) -> UInt8 {
+        guard offset >= 0, offset < data.count else { return 0 }
+        return data[offset]
+    }
+
+    func read(_ range: Range<Int>) -> [UInt8] {
+        let lo = max(0, range.lowerBound)
+        let hi = min(data.count, range.upperBound)
+        guard lo < hi else { return [] }
+        return [UInt8](data[lo..<hi])
+    }
+}
+
+/// Read-only aligned access to a raw device node.
+///
+/// `/dev/rdisk*` is a character device: the raw node rejects unaligned I/O,
+/// and macOS does not implement `mmap` for it (ENODEV). Every read here is a
+/// sector-aligned `pread` into an aligned buffer, with a tiny bounce handling
+/// the unaligned head/tail, so the same code works on the buffered
+/// `/dev/disk*` node as well.
+final class DeviceIO {
+    let fd: Int32
+    let path: String
+    let sectorSize: Int
+    /// Media length in bytes; 0 when neither the hint nor the ioctl gave one.
+    let mediaLength: Int
+
+    // DKIOCGETBLOCKSIZE  = _IOR('d', 4,  UInt32)
+    // DKIOCGETBLOCKCOUNT = _IOR('d', 25, UInt64)
+    private static let ioctlBlockSize: UInt = 0x40046404
+    private static let ioctlBlockCount: UInt = 0x40086419
+
+    private init(fd: Int32, path: String, sectorSize: Int, mediaLength: Int) {
+        self.fd = fd
+        self.path = path
+        self.sectorSize = sectorSize
+        self.mediaLength = mediaLength
+    }
+
+    /// Opens `path` read-only. Returns nil (errno preserved) on failure.
+    /// `hintedLength` (from DiskArbitration) is preferred; the block-count
+    /// ioctl is only consulted when it is missing.
+    static func open(path: String, hintedLength: Int) -> DeviceIO? {
+        let fd = open(path, O_RDONLY)
+        guard fd >= 0 else { return nil }
+
+        var blockSize: UInt32 = 512
+        if ioctl(fd, ioctlBlockSize, &blockSize) != 0 || blockSize == 0 {
+            blockSize = 512
+        }
+        let sectors = Int(blockSize)
+
+        var length = hintedLength
+        if length <= 0 {
+            var blocks: UInt64 = 0
+            if ioctl(fd, ioctlBlockCount, &blocks) == 0, blocks > 0 {
+                length = Int(blocks) * sectors
+            }
+        }
+        return DeviceIO(fd: fd, path: path, sectorSize: sectors, mediaLength: length)
+    }
+
+    deinit { close(fd) }
+
+    /// Reads an arbitrary range (any alignment). A short read at media end
+    /// returns just the available bytes.
+    func read(offset: Int, count: Int) -> [UInt8]? {
+        guard count > 0 else { return [] }
+        let s = sectorSize
+        let alignedStart = (offset / s) * s
+        let requestedEnd = offset + count
+        var alignedEnd = ((requestedEnd + s - 1) / s) * s
+        if mediaLength > 0 { alignedEnd = min(alignedEnd, mediaLength) }
+
+        guard alignedEnd > alignedStart,
+              let aligned = alignedRead(offset: alignedStart, count: alignedEnd - alignedStart) else {
+            return nil
+        }
+        if alignedStart == offset && alignedEnd == requestedEnd { return aligned }
+        let inner = offset - alignedStart
+        let take = min(count, aligned.count - inner)
+        guard take > 0 else { return [] }
+        return Array(aligned[inner..<(inner + take)])
+    }
+
+    /// Sector-aligned read into a page-aligned buffer (required by raw nodes).
+    private func alignedRead(offset: Int, count: Int) -> [UInt8]? {
+        var raw: UnsafeMutableRawPointer?
+        guard posix_memalign(&raw, 4096, count) == 0, let dest = raw else { return nil }
+        defer { free(dest) }
+
+        var done = 0
+        while done < count {
+            let n = pread(fd, dest.advanced(by: done), count - done, off_t(offset + done))
+            if n > 0 {
+                done += n
+            } else if n == 0 {
+                break // end of media
+            } else if errno == EINTR {
+                continue
+            } else {
+                return nil
+            }
+        }
+        return Array(UnsafeMutableRawBufferPointer(start: dest, count: done))
+    }
+}
+
+/// Memory-mapped device. Media length is not necessarily a multiple of the CPU
+/// page size, so the trailing partial page (if any) is served by `pread`.
+private final class MappedDeviceBacking: ContentBacking {
+    let count: Int
+    private let mapped: Data
+    private let io: DeviceIO
+
+    private var mappedCount: Int { mapped.count }
+
+    init(mapped: Data, io: DeviceIO, count: Int) {
+        self.mapped = mapped
+        self.io = io
+        self.count = count
+    }
+
+    func byte(at offset: Int) -> UInt8 {
+        guard offset >= 0, offset < count else { return 0 }
+        if offset < mappedCount { return mapped[offset] }
+        return io.read(offset: offset, count: 1)?.first ?? 0
+    }
+
+    func read(_ range: Range<Int>) -> [UInt8] {
+        let lo = max(0, range.lowerBound)
+        let hi = min(count, range.upperBound)
+        guard lo < hi else { return [] }
+
+        var out = [UInt8](repeating: 0, count: hi - lo)
+        let mappedEnd = min(hi, mappedCount)
+        if lo < mappedEnd {
+            out.replaceSubrange(0..<(mappedEnd - lo), with: mapped[lo..<mappedEnd])
+        }
+        let tailStart = max(lo, mappedCount)
+        if hi > tailStart, let tail = io.read(offset: tailStart, count: hi - tailStart) {
+            let outStart = tailStart - lo
+            out.replaceSubrange(outStart..<(outStart + tail.count), with: tail)
+        }
+        return out
+    }
+}
+
+/// On-demand device reader backed by a bounded LRU window (32 × 1 MiB). The
+/// whole disk is never held in memory; large (multi-block) reads stream
+/// straight from the device so FAT/bitmap scans do not evict the window.
+private final class RawDeviceBacking: ContentBacking {
+    let count: Int
+
+    private let io: DeviceIO
+    private let blockSize = 1 << 20
+    private let maxCachedBlocks = 32
+    private let streamChunkSize = 4 << 20
+    private var blocks: [Int: Data] = [:]
+    private var lru: [Int] = []
+    private let lock = NSLock()
+
+    init(io: DeviceIO, count: Int) {
+        self.io = io
+        self.count = count
+    }
+
+    func byte(at offset: Int) -> UInt8 {
+        guard offset >= 0, offset < count else { return 0 }
+        return read(offset..<(offset + 1)).first ?? 0
+    }
+
+    func read(_ range: Range<Int>) -> [UInt8] {
+        let lo = max(0, range.lowerBound)
+        let hi = min(count, range.upperBound)
+        guard lo < hi else { return [] }
+        return (hi - lo) >= blockSize ? stream(lo, hi) : windowed(lo, hi)
+    }
+
+    private func stream(_ lo: Int, _ hi: Int) -> [UInt8] {
+        let total = hi - lo
+        var out = [UInt8](repeating: 0, count: total)
+        var done = 0
+        while done < total {
+            let chunk = min(streamChunkSize, total - done)
+            guard let part = io.read(offset: lo + done, count: chunk) else { break }
+            if part.isEmpty { break }
+            out.replaceSubrange(done..<(done + part.count), with: part)
+            done += part.count
+            if part.count < chunk { break }
+        }
+        return out
+    }
+
+    private func windowed(_ lo: Int, _ hi: Int) -> [UInt8] {
+        lock.lock()
+        defer { lock.unlock() }
+
+        var out = [UInt8](repeating: 0, count: hi - lo)
+        var pos = lo
+        while pos < hi {
+            let index = pos / blockSize
+            let blockStart = index * blockSize
+            guard let block = cachedBlock(index) else { break }
+            let inner = pos - blockStart
+            let available = block.count - inner
+            guard available > 0 else { break }
+            let take = min(available, hi - pos)
+            out.replaceSubrange((pos - lo)..<(pos - lo + take),
+                                with: block[inner..<(inner + take)])
+            pos += take
+        }
+        return out
+    }
+
+    private func cachedBlock(_ index: Int) -> Data? {
+        if let existing = blocks[index] {
+            touch(index)
+            return existing
+        }
+        let blockStart = index * blockSize
+        guard let loaded = io.read(offset: blockStart,
+                                   count: min(blockSize, count - blockStart)) else {
+            return nil
+        }
+        let block = Data(loaded)
+        blocks[index] = block
+        lru.append(index)
+        while lru.count > maxCachedBlocks {
+            let oldest = lru.removeFirst()
+            if oldest != index { blocks.removeValue(forKey: oldest) }
+        }
+        return block
+    }
+
+    private func touch(_ index: Int) {
+        guard let position = lru.firstIndex(of: index) else { return }
+        lru.remove(at: position)
+        lru.append(index)
+    }
+}
+
 /// Backing store for an opened file.
 ///
 /// The original file is memory-mapped (`mappedIfSafe`) so multi-GB images can be
@@ -53,7 +320,7 @@ final class HexDocument {
     private(set) var isDirty = false
     private(set) var size = 0
 
-    private var original = Data()
+    private var backing: ContentBacking = DataBacking(Data())
     private var chunks: [Chunk] = []
     /// Cached start offset of every chunk (prefix sums); rebuilt on structural change.
     private var chunkStarts: [Int] = []
@@ -84,7 +351,7 @@ final class HexDocument {
         guard let url else {
             self.url = nil
             isReadOnly = false
-            original = Data()
+            backing = DataBacking(Data())
             size = 0
             return
         }
@@ -93,21 +360,23 @@ final class HexDocument {
         isReadOnly = url.path.hasPrefix("/dev/")
 
         let fm = FileManager.default
+        let data: Data
         if let mapped = try? Data(contentsOf: url, options: .mappedIfSafe) {
-            original = mapped
+            data = mapped
         } else if !isReadOnly,
                   let attrs = try? fm.attributesOfItem(atPath: url.path),
                   let fileSize = attrs[.size] as? Int, fileSize <= 512 << 20,
                   let plain = try? Data(contentsOf: url) {
             // Only regular files up to ~512 MB may fall back to a full read; a raw
             // device (or an oversized file) must never be slurped into memory.
-            original = plain
+            data = plain
         } else {
-            original = Data()
+            data = Data()
         }
 
-        if original.count > 0 {
-            chunks = [.original(offset: 0, count: original.count)]
+        backing = DataBacking(data)
+        if data.count > 0 {
+            chunks = [.original(offset: 0, count: data.count)]
         }
         rebuildIndex()
     }
@@ -116,40 +385,93 @@ final class HexDocument {
         load(url: url)
     }
 
-    /// Maps a raw device of a known length, read-only.
+    /// Opens a raw device, read-only, without ever loading it all into memory.
     ///
-    /// `Data(contentsOf:options:)` is unusable here: `stat` reports no size for a
-    /// device node, so mapping fails and Foundation falls back to reading the
-    /// whole thing into memory, which is fatal for a multi-GB disk. Mapping the
-    /// device explicitly keeps memory flat and lets the page cache do the reads.
-    @discardableResult
-    func loadDevice(url: URL, length: Int64) -> Bool {
-        original = Data()
+    /// Strategy:
+    /// 1. `mmap` the raw `/dev/rdisk*` node (works on systems whose character
+    ///    device implements mapping).
+    /// 2. `mmap` the buffered `/dev/disk*` block node (raw node often returns
+    ///    ENODEV while the block node maps).
+    /// 3. Windowed, sector-aligned `pread` with a bounded LRU cache — always
+    ///    works, memory stays flat for TB-class media.
+    func loadDevice(url: URL, length: Int64) throws {
+        resetForLoad()
+
+        let rawPath = url.path
+        var candidates = [rawPath]
+        if rawPath.hasPrefix("/dev/r") {
+            candidates.append("/dev/" + String(rawPath.dropFirst("/dev/r".count)))
+        }
+
+        let hinted = Int(length)
+        var primary: DeviceIO?
+        var reasons: [String] = []
+        for path in candidates {
+            if let io = DeviceIO.open(path: path, hintedLength: hinted) {
+                primary = io
+                break
+            }
+            reasons.append("\(path): \(String(cString: strerror(errno))) (\(errno))")
+        }
+
+        guard let io = primary else {
+            throw DeviceLoadError(message: reasons.joined(separator: "\n"))
+        }
+        guard io.mediaLength > 0 else {
+            throw DeviceLoadError(message: "Unknown device size (DAMediaSize and block-count ioctl both returned 0).")
+        }
+        let count = io.mediaLength
+
+        // Tier 1/2: explicit mapping, whole pages only. The tail past the last
+        // mapped page is served with pread by MappedDeviceBacking.
+        let pageSize = max(1, sysconf(_SC_PAGESIZE))
+        let mappedLength = (count / pageSize) * pageSize
+        if mappedLength > 0 {
+            if let data = mapDevice(io.fd, length: mappedLength) {
+                backing = MappedDeviceBacking(mapped: data, io: io, count: count)
+                finalizeDeviceLoad(url: url, count: count)
+                return
+            }
+            for path in candidates where path != io.path {
+                if let second = DeviceIO.open(path: path, hintedLength: count),
+                   let data = mapDevice(second.fd, length: mappedLength) {
+                    backing = MappedDeviceBacking(mapped: data, io: second, count: count)
+                    finalizeDeviceLoad(url: url, count: count)
+                    return
+                }
+            }
+        }
+
+        // Tier 3: on-demand aligned pread with a bounded window.
+        backing = RawDeviceBacking(io: io, count: count)
+        finalizeDeviceLoad(url: url, count: count)
+    }
+
+    private func resetForLoad() {
+        backing = DataBacking(Data())
         chunks.removeAll()
         chunkStarts.removeAll()
         undoStack.removeAll()
         redoStack.removeAll()
         isDirty = false
+        url = nil
+        isReadOnly = false
         rebuildIndex()
+    }
 
-        let count = Int(length)
-        guard count > 0 else { return false }
-
-        let fd = open(url.path, O_RDONLY)
-        guard fd >= 0 else { return false }
-        defer { close(fd) }
-
-        let mapped = mmap(nil, count, PROT_READ, MAP_PRIVATE, fd, 0)
-        guard let base = mapped, Int(bitPattern: UnsafeRawPointer(base)) != -1 else { return false }
-
+    private func finalizeDeviceLoad(url: URL, count: Int) {
         self.url = url
         isReadOnly = true
-        original = Data(bytesNoCopy: base, count: count, deallocator: .custom { pointer, size in
-            munmap(pointer, size)
-        })
         chunks = [.original(offset: 0, count: count)]
         rebuildIndex()
-        return true
+    }
+
+    private func mapDevice(_ fd: Int32, length: Int) -> Data? {
+        let mapped = mmap(nil, length, PROT_READ, MAP_PRIVATE, fd, 0)
+        guard let base = mapped, Int(bitPattern: UnsafeRawPointer(base)) != -1 else { return nil }
+        return Data(bytesNoCopy: base, count: length, deallocator: .custom { pointer, size in
+            munmap(pointer, size)
+        })
     }
 
     // MARK: - Reading
@@ -159,9 +481,7 @@ final class HexDocument {
         let (index, inner) = locate(offset)
         switch chunks[index] {
         case .original(let base, _):
-            return original.withUnsafeBytes { (ptr: UnsafeRawBufferPointer) -> UInt8 in
-                ptr[base + inner]
-            }
+            return backing.byte(at: base + inner)
         case .bytes(let b):
             return b[inner]
         }
@@ -181,8 +501,8 @@ final class HexDocument {
             let take = min(chunk.length - inner, hi - offset)
             switch chunk {
             case .original(let base, _):
-                let start = original.startIndex + base + inner
-                out.append(contentsOf: original[start..<(start + take)])
+                let start = base + inner
+                out.append(contentsOf: backing.read(start..<(start + take)))
             case .bytes(let b):
                 out.append(contentsOf: b[inner..<(inner + take)])
             }
@@ -411,8 +731,8 @@ final class HexDocument {
                 var written = 0
                 while written < count {
                     let take = min(chunkSize, count - written)
-                    let start = original.startIndex + base + written
-                    try handle.write(contentsOf: original[start..<(start + take)])
+                    let start = base + written
+                    try handle.write(contentsOf: backing.read(start..<(start + take)))
                     written += take
                 }
             case .bytes(let b):

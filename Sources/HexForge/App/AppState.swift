@@ -837,21 +837,41 @@ final class AppState: ObservableObject {
         openDevice(at: path)
     }
 
-    /// Opens a file or raw device by path. Devices are mapped explicitly so a
-    /// whole disk is never read into memory.
-    func openDevice(at path: String) {
+    /// Opens a file or raw device by path. Devices are mapped (or read on
+    /// demand through a bounded window) so a whole disk is never loaded into
+    /// memory. Returns false (with an alert) on failure so the picker can stay
+    /// open instead of looking like nothing happened.
+    @discardableResult
+    func openDevice(at path: String) -> Bool {
         let url = URL(fileURLWithPath: path)
         var opened = false
+        var failureDetail: String?
 
         if path.hasPrefix("/dev/") {
             let length = DiskService.deviceSize(ofPath: path)
-            if length > 0 { opened = document.loadDevice(url: url, length: length) }
+            do {
+                try document.loadDevice(url: url, length: length)
+                opened = true
+            } catch {
+                failureDetail = error.localizedDescription
+            }
         } else {
             document.load(url: url)
             opened = document.size > 0
+            if !opened {
+                failureDetail = URL(fileURLWithPath: path).path
+                document.load(url: nil)
+            }
         }
 
-        if !opened { document.load(url: nil) }
+        guard opened else {
+            statusMessage = L.f("Could not open %@ (permission or unknown size)", path)
+            presentOpenFailure(path: path, detail: failureDetail,
+                               rawDevice: path.hasPrefix("/dev/"))
+            bump()
+            return false
+        }
+
         clearCompare()
         clearSearchResults()
         fsBrowser.reset()
@@ -861,15 +881,32 @@ final class AppState: ObservableObject {
         if showFileSystem { fsBrowser.open(using: self) }
         cursor = 0; anchor = 0; nibbleHigh = true
 
-        if !opened {
-            statusMessage = L.f("Could not open %@ (permission or unknown size)", path)
-        } else if let signature = detectFormat() {
+        if let signature = detectFormat() {
             statusMessage = L.f("Opened device %@ · %@", path, signature.name)
         } else {
             statusMessage = L.f("Opened device %@ (%@)", path, byteCountString(document.size))
         }
         scrollToken &+= 1
         bump()
+        return true
+    }
+
+    /// Modal alert shown when a raw device cannot be opened; the status-bar
+    /// message alone is easy to miss behind the pick list.
+    private func presentOpenFailure(path: String, detail: String?, rawDevice: Bool) {
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = rawDevice
+            ? L.f("Could not open raw device %@", path)
+            : L.f("Could not open %@ (permission or unknown size)", path)
+        if rawDevice {
+            let hint = L.t("Make sure HexForge was started with administrator rights (sudo) and the device exists.")
+            alert.informativeText = hint + "\n\n" + (detail ?? "")
+        } else {
+            alert.informativeText = detail ?? ""
+        }
+        alert.addButton(withTitle: L.t("OK"))
+        alert.runModal()
     }
 
     // MARK: - Disk list
@@ -895,7 +932,7 @@ final class AppState: ObservableObject {
                 promptForAdministratorRights()
                 return false
             }
-            openDevice(at: disk.rawPath)
+            return openDevice(at: disk.rawPath)
         case .cloneSource:
             cloneSource = disk.rawPath
             if !DiskService.isPrivileged { statusMessage = L.t("Raw devices need administrator rights.") }
