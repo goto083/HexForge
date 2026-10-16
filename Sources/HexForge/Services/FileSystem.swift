@@ -23,6 +23,34 @@ struct FSEntry: Identifiable {
     let accessed: Date?
     /// DOS attribute letters, e.g. "A" / "RHSA" (empty for directories).
     let attributes: String
+    /// exFAT "NoFatChain" flag: the file occupies consecutive clusters.
+    let contiguous: Bool = false
+    /// Text for the Name column when it differs from `name` (the ".." rows).
+    let displayNameOverride: String? = nil
+    /// True for synthetic entries (boot sector, FAT table, free space …).
+    let isSystem: Bool = false
+    /// Cluster to navigate to for the synthesized ".." entry.
+    let parentCluster: UInt32? = nil
+}
+
+/// A run of consecutive clusters belonging to one file.
+struct ClusterSpan {
+    let start: UInt32
+    let count: UInt32
+    var end: UInt32 { start + count }        // exclusive
+}
+
+/// Which file (and parent chain) owns a cluster.
+struct FileOwner {
+    let name: String
+    /// Directory chain from the volume root, e.g. ["DCIM", "100CANON"].
+    let parentPath: [String]
+    let isDirectory: Bool
+
+    /// "\\DCIM\\100CANON\\" (WinHex shows the containing directory).
+    var directoryPath: String {
+        parentPath.isEmpty ? "\\" : "\\" + parentPath.joined(separator: "\\") + "\\"
+    }
 }
 
 /// Parsed boot-sector geometry, shared by FAT32 and exFAT.
@@ -179,23 +207,58 @@ struct FSVolume {
         return free
     }
 
-    private func exfatFreeClusters() -> UInt32? {
-        // Find the allocation bitmap entry (0x81) in the root directory.
+    /// Scans a root-directory entry set of the given type ("$Bitmap" 0x81,
+    /// "$UpCase" 0x82) and returns its first cluster plus byte length.
+    private func exfatRootTable(_ type: UInt8) -> (cluster: UInt32, length: Int)? {
         let chain = readChainDetailed(start: info.rootCluster)
-        var bitmapCluster: UInt32 = 0
-        var bitmapLength: UInt64 = 0
-        for offset in stride(from: 0, to: chain.bytes.count - 31, by: 32) {
-            if chain.bytes[offset] == 0x81 {
-                bitmapCluster = u32(chain.bytes, offset + 0x14)
-                bitmapLength = u64(chain.bytes, offset + 0x18)
-                break
+        var offset = 0
+        while offset + 32 <= chain.bytes.count {
+            if chain.bytes[offset] == type {
+                let cluster = u32(chain.bytes, offset + 0x14)
+                let length = Int(u64(chain.bytes, offset + 0x18))
+                if cluster >= 2, length > 0 { return (cluster, length) }
             }
+            offset += 32
         }
-        guard bitmapCluster >= 2, bitmapLength > 0 else { return nil }
+        return nil
+    }
+
+    /// First free cluster, found through the exFAT allocation bitmap.
+    private func exfatFirstFreeCluster(_ bitmap: (cluster: UInt32, length: Int)) -> UInt32? {
+        var cluster: UInt32 = bitmap.cluster
+        var visited: Set<UInt32> = []
+        var index = 0
+        while !visited.contains(cluster), index < bitmap.length {
+            visited.insert(cluster)
+            let off = base + info.clusterOffset(cluster)
+            let take = min(bitmap.length - index, info.clusterSize, document.size - off)
+            guard take > 0 else { return nil }
+            let bytes = document.bytes(in: off..<(off + take))
+            for (byteIndex, byte) in bytes.enumerated() where byte != 0xFF {
+                // Bit 0 of byte 0 is cluster 2 (clusters 0/1 are reserved).
+                var bit = 0
+                while bit < 8 {
+                    if byte & (1 << UInt8(bit)) == 0 {
+                        let candidate = UInt32(index + byteIndex * 8 + bit)
+                        if candidate >= 2 { return candidate }
+                    }
+                    bit += 1
+                }
+            }
+            index += bytes.count
+            guard let next = nextCluster(cluster) else { return nil }
+            cluster = next
+        }
+        return nil
+    }
+
+    private func exfatFreeClusters() -> UInt32? {
+        guard let bitmap = exfatRootTable(0x81) else { return nil }
+        let bitmapLength = bitmap.length
 
         var free: UInt32 = 0
         var remaining = Int(bitmapLength)
-        var cluster: UInt32? = bitmapCluster
+        var cluster: UInt32? = bitmap.cluster
         var visited: Set<UInt32> = []
         while let c = cluster, !visited.contains(c), remaining > 0 {
             visited.insert(c)
@@ -224,6 +287,142 @@ struct FSVolume {
         return value
     }
 
+    /// Number of clusters an entry occupies according to its logical size.
+    private func clusterCount(for entry: FSEntry) -> UInt32 {
+        let size = max(entry.size, UInt64(info.clusterSize))
+        return UInt32((size + UInt64(info.clusterSize) - 1) / UInt64(info.clusterSize))
+    }
+
+    /// Cluster runs occupied by an entry. exFAT files flagged "NoFatChain" are
+    /// stored consecutively; everything else follows the FAT chain. Runs of
+    /// consecutive clusters are coalesced, so fragmented files yield few spans.
+    func clusterSpans(for entry: FSEntry) -> [ClusterSpan] {
+        guard entry.firstCluster >= 2 else { return [] }
+        if entry.contiguous {
+            return [ClusterSpan(start: entry.firstCluster, count: max(1, clusterCount(for: entry)))]
+        }
+        var spans: [ClusterSpan] = []
+        var cluster: UInt32? = entry.firstCluster
+        var visited: Set<UInt32> = []
+        var runStart = entry.firstCluster
+        var runCount: UInt32 = 0
+        var previous = entry.firstCluster
+        while let c = cluster, visited.count < 1_000_000, !visited.contains(c), spans.count < 4096 {
+            visited.insert(c)
+            if runCount == 0 {
+                runStart = c
+                runCount = 1
+            } else if c == previous + 1 {
+                runCount += 1
+            } else {
+                spans.append(ClusterSpan(start: runStart, count: runCount))
+                runStart = c
+                runCount = 1
+            }
+            previous = c
+            cluster = nextCluster(c)
+        }
+        if runCount > 0 { spans.append(ClusterSpan(start: runStart, count: runCount)) }
+        return spans
+    }
+
+    /// Volume cluster containing an absolute byte offset. Returns nil inside the
+    /// reserved system area (boot sector, FAT, root directory regions).
+    func clusterNumber(atOffset offset: Int) -> UInt32? {
+        guard info.clusterSize > 0 else { return nil }
+        let heapStart = base + info.heapStartSector * info.bytesPerSector
+        guard offset >= heapStart else { return nil }
+        return UInt32((offset - heapStart) / info.clusterSize) + 2
+    }
+
+    /// Name of the reserved area containing an offset, if any.
+    func systemAreaName(atOffset offset: Int) -> String? {
+        let relative = offset - base
+        guard relative >= 0 else { return nil }
+        if relative < info.bytesPerSector { return L.t("Boot sector (DBR)") }
+        let fatStart = info.fatOffset
+        if relative >= fatStart, relative < fatStart + info.fatLength { return "FAT" }
+        if relative < info.heapStartSector * info.bytesPerSector { return L.t("Reserved area") }
+        return nil
+    }
+
+    /// Byte offset of the lowest free cluster ("Free space" entry).
+    func firstFreeClusterOffset() -> Int? {
+        if let cluster = firstFreeCluster() {
+            return base + info.clusterOffset(cluster)
+        }
+        return nil
+    }
+
+    private func firstFreeCluster() -> UInt32? {
+        switch info.kind {
+        case .exFAT:
+            guard let bitmap = exfatRootTable(0x81) else { return nil }
+            return exfatFirstFreeCluster(bitmap)
+        case .fat32:
+            let count = Int(info.totalClusters) + 2
+            let limit = min(count, 1 << 22)
+            var cluster = 2
+            while cluster < limit {
+                let chunkEnd = min(cluster + 4096, limit)
+                let off = base + info.fatOffset + cluster * 4
+                guard off + (chunkEnd - cluster) * 4 <= document.size else { break }
+                let block = document.bytes(in: off..<(off + (chunkEnd - cluster) * 4))
+                var i = 0
+                while i + 3 < block.count {
+                    if u32(block, i) == 0 { return UInt32(cluster + i / 4) }
+                    i += 4
+                }
+                cluster = chunkEnd
+            }
+            return nil
+        }
+    }
+
+    /// Synthetic entries WinHex lists at the root of a volume: the boot sector,
+    /// the FAT, the exFAT system tables and the free space. All are clickable.
+    func rootSystemEntries() -> [FSEntry] {
+        var out: [FSEntry] = []
+        out.append(systemEntry(name: L.t("Boot sector"),
+                               size: UInt64(info.bytesPerSector),
+                               offset: base, length: info.bytesPerSector))
+        out.append(systemEntry(name: "FAT",
+                               size: UInt64(info.fatLength),
+                               offset: base + info.fatOffset, length: info.fatLength))
+        out.append(systemEntry(name: "FAT (2nd copy)",
+                               size: UInt64(info.fatLength),
+                               offset: base + info.fatOffset + info.fatLength,
+                               length: info.fatLength))
+        if info.kind == .exFAT {
+            if let bitmap = exfatRootTable(0x81) {
+                out.append(systemEntry(name: "$Bitmap", size: UInt64(bitmap.length),
+                                       offset: base + info.clusterOffset(bitmap.cluster),
+                                       length: bitmap.length))
+            }
+            if let upcase = exfatRootTable(0x82) {
+                out.append(systemEntry(name: "$UpCase", size: UInt64(upcase.length),
+                                       offset: base + info.clusterOffset(upcase.cluster),
+                                       length: upcase.length))
+            }
+        }
+        let freeBytes = freeClusterCount().map { UInt64($0) * UInt64(info.clusterSize) }
+        let firstFree = firstFreeClusterOffset()
+        out.append(systemEntry(name: L.t("Free space"),
+                               size: freeBytes ?? 0,
+                               offset: firstFree ?? base,
+                               length: info.clusterSize))
+        return out
+    }
+
+    private func systemEntry(name: String, size: UInt64, offset: Int, length: Int) -> FSEntry {
+        FSEntry(name: name, ext: "", isDirectory: false, isDeleted: false,
+                size: size, firstCluster: 0, dataOffset: offset,
+                revealLength: max(1, min(length, 1 << 20)),
+                entryOffset: offset, entryLength: 0,
+                created: nil, modified: nil, accessed: nil, attributes: "SYS",
+                isSystem: true)
+    }
+
     /// Walks a cluster chain, recording how the concatenated data maps to disk.
     private func readChainDetailed(start startCluster: UInt32) -> (bytes: [UInt8], segments: [(dataStart: Int, diskOffset: Int, length: Int)]) {
         var out: [UInt8] = []
@@ -246,14 +445,32 @@ struct FSVolume {
 
     /// The full cluster chain of a file, streamed to `url` (recovery/copy).
     /// At most `logicalSize` bytes are written.
-    func copyChain(start startCluster: UInt32, logicalSize: UInt64, to url: URL) throws {
+    func copyChain(entry: FSEntry, to url: URL) throws {
+        let startCluster = entry.firstCluster
         guard startCluster >= 2 else { return }
         FileManager.default.createFile(atPath: url.path, contents: nil)
         let handle = try FileHandle(forWritingTo: url)
         defer { try? handle.close() }
+
+        if entry.contiguous {
+            var cluster = startCluster
+            var remaining = entry.size
+            while remaining > 0 {
+                let offset = base + info.clusterOffset(cluster)
+                let end = min(offset + info.clusterSize, document.size)
+                guard offset >= 0, offset < end else { break }
+                var chunk = document.bytes(in: offset..<end)
+                if chunk.count > remaining { chunk = Array(chunk.prefix(Int(remaining))) }
+                try handle.write(contentsOf: chunk)
+                remaining -= UInt64(chunk.count)
+                cluster += 1
+            }
+            return
+        }
+
         var cluster: UInt32? = startCluster
         var visited: Set<UInt32> = []
-        var remaining = logicalSize
+        var remaining = entry.size
         while let c = cluster, !visited.contains(c), remaining > 0 {
             visited.insert(c)
             let offset = base + info.clusterOffset(c)
@@ -267,17 +484,37 @@ struct FSVolume {
         }
     }
 
-    /// Every cluster in a file's chain ("List Clusters").
-    func clusterChain(start startCluster: UInt32) -> [UInt32] {
+    /// Every cluster of an entry ("List Clusters"), capped so huge files stay
+    /// browsable. Contiguous exFAT files are expanded arithmetically.
+    func clusterChain(for entry: FSEntry, limit: Int = 4096) -> [UInt32] {
+        guard entry.firstCluster >= 2 else { return [] }
+        if entry.contiguous {
+            let total = Int(max(1, clusterCount(for: entry)))
+            return (0..<min(total, limit)).map { entry.firstCluster + UInt32($0) }
+        }
         var out: [UInt32] = []
-        var cluster: UInt32? = startCluster
+        var cluster: UInt32? = entry.firstCluster
         var visited: Set<UInt32> = []
-        while let c = cluster, !visited.contains(c) {
+        while let c = cluster, !visited.contains(c), out.count < limit {
             visited.insert(c)
             out.append(c)
             cluster = nextCluster(c)
         }
         return out
+    }
+
+    /// Total clusters in an entry's chain, for the "N of M" caption.
+    func clusterChainLength(for entry: FSEntry, limit: Int = 4096) -> Int {
+        if entry.contiguous { return Int(max(1, clusterCount(for: entry))) }
+        var count = 0
+        var cluster: UInt32? = entry.firstCluster
+        var visited: Set<UInt32> = []
+        while let c = cluster, !visited.contains(c), count < limit {
+            visited.insert(c)
+            count += 1
+            cluster = nextCluster(c)
+        }
+        return count
     }
 
     // MARK: - Directory listing
@@ -412,6 +649,7 @@ struct FSVolume {
             var name = ""
             var size: UInt64 = 0
             var cluster: UInt32 = 0
+            var contiguous = false
             var cursor = offset + 32
             var remaining = secondaryCount
             while remaining > 0, cursor + 32 <= data.count {
@@ -422,6 +660,7 @@ struct FSVolume {
                 case 0xC0, 0x40:                        // stream extension
                     size = u64(s, 0x08)
                     cluster = u32(s, 0x14)
+                    contiguous = (s[1] & 0x02) != 0     // GeneralSecondaryFlags bit 1
                 case 0xC1, 0x41:                        // file name fragment
                     var chars: [UInt16] = []
                     for i in stride(from: 2, to: 32, by: 2) {
@@ -440,7 +679,8 @@ struct FSVolume {
                                      entryOffset: recordOffset,
                                      entryLength: (secondaryCount + 1) * 32,
                                      created: created, modified: modified, accessed: accessed,
-                                     attributes: isDir ? "" : dosAttributes(u16(e, 4))))
+                                     attributes: isDir ? "" : dosAttributes(u16(e, 4)),
+                                     contiguous: contiguous))
         }
         return sortEntries(entries)
     }
@@ -474,7 +714,7 @@ struct FSVolume {
                            size: UInt64, cluster: UInt32,
                            entryOffset: Int, entryLength: Int,
                            created: Date?, modified: Date?, accessed: Date?,
-                           attributes: String) -> FSEntry {
+                           attributes: String, contiguous: Bool = false) -> FSEntry {
         let offset = cluster >= 2 ? base + info.clusterOffset(cluster) : 0
         let reveal = isDir ? info.clusterSize : Int(min(size, UInt64(info.clusterSize)))
         let ext = (!isDir && name.contains(".")) ? String(name.split(separator: ".").last ?? "") : ""
@@ -483,7 +723,7 @@ struct FSVolume {
                        dataOffset: offset, revealLength: max(1, reveal),
                        entryOffset: entryOffset, entryLength: entryLength,
                        created: created, modified: modified, accessed: accessed,
-                       attributes: attributes)
+                       attributes: attributes, contiguous: contiguous)
     }
 
     private func sortEntries(_ entries: [FSEntry]) -> [FSEntry] {
@@ -517,13 +757,27 @@ final class FileSystemBrowser: ObservableObject {
     @Published private(set) var pathNames: [String] = []
     @Published var status = ""
     @Published var selectedEntryID: UUID?
-    /// "List Clusters" popover state.
+    /// "List Clusters" sheet state.
     @Published var clusterListEntry: FSEntry?
     @Published var clusterList: [UInt32] = []
+    @Published var clusterListTotal = 0
+    /// Cluster → file reverse index, filled in by a background tree scan.
+    @Published private(set) var owners: [OwnerSpan] = []
+    @Published private(set) var scanning = false
 
-    /// Cluster stack backing `pathNames` (root is the bottom).
+    /// A cluster run owned by one file (the index is sorted by `start`).
+    struct OwnerSpan {
+        let start: UInt32
+        let end: UInt32          // exclusive
+        let owner: FileOwner
+    }
+
+    /// Cluster stack backing `pathNames` (root is the bottom). `pathNames[i]` is
+    /// the name of the directory held in `clusterStack[i + 1]`.
     private var clusterStack: [UInt32] = []
     private var attempted = false
+    private var scanToken = 0
+    private var scanCancelled = false
 
     func reset() {
         volume = nil
@@ -536,8 +790,15 @@ final class FileSystemBrowser: ObservableObject {
         selectedEntryID = nil
         clusterListEntry = nil
         clusterList = []
+        clusterListTotal = 0
+        owners = []
+        scanning = false
+        scanCancelled = true
         attempted = false
     }
+
+    /// True while the browser sits at the volume root (no ".." row).
+    var isAtRoot: Bool { clusterStack.count <= 1 }
 
     /// Detects the file system and lists the root directory. Idempotent.
     func open(using state: AppState) {
@@ -550,9 +811,58 @@ final class FileSystemBrowser: ObservableObject {
         self.volume = volume
         self.label = volume.volumeLabel()
         clusterStack = [volume.info.rootCluster]
-        entries = volume.listDirectory(cluster: volume.info.rootCluster)
+        pathNames = []
+        state.fsSectorSize = volume.info.bytesPerSector
+        state.fsClusterSize = volume.info.clusterSize
+        reload(using: state)
         status = ""
         computeFreeSpace(volume)
+        startOwnerScan()
+    }
+
+    /// Reloads the current directory, prepending either the root system entries
+    /// (boot sector, FAT, $Bitmap …) or the ". / .." navigation rows.
+    private func reload(using state: AppState) {
+        guard let volume else { return }
+        let cluster = clusterStack.last ?? volume.info.rootCluster
+        let listing = volume.listDirectory(cluster: cluster)
+        if isAtRoot {
+            entries = volume.rootSystemEntries() + listing
+        } else {
+            entries = navigationEntries() + listing
+        }
+    }
+
+    /// Synthesised ". = <current>" and ".. = <parent>" rows, as WinHex shows
+    /// at the top of every non-root directory.
+    private func navigationEntries() -> [FSEntry] {
+        guard clusterStack.count > 1, let volume else { return [] }
+        let currentName = pathNames.last ?? label
+        let parentName: String
+        if pathNames.count >= 2 {
+            parentName = pathNames[pathNames.count - 2]
+        } else {
+            parentName = label.isEmpty ? L.t("Root directory") : label
+        }
+        let currentCluster = clusterStack[clusterStack.count - 1]
+        let parentCluster = clusterStack[clusterStack.count - 2]
+        let clusterSize = UInt64(volume.info.clusterSize)
+        let dot = FSEntry(name: ".", ext: "", isDirectory: true, isDeleted: false,
+                          size: clusterSize, firstCluster: currentCluster,
+                          dataOffset: volume.base + volume.info.clusterOffset(currentCluster),
+                          revealLength: volume.info.clusterSize,
+                          entryOffset: 0, entryLength: 0,
+                          created: nil, modified: nil, accessed: nil, attributes: "",
+                          displayNameOverride: ". = " + currentName)
+        let dotdot = FSEntry(name: "..", ext: "", isDirectory: true, isDeleted: false,
+                             size: clusterSize, firstCluster: parentCluster,
+                             dataOffset: volume.base + volume.info.clusterOffset(parentCluster),
+                             revealLength: volume.info.clusterSize,
+                             entryOffset: 0, entryLength: 0,
+                             created: nil, modified: nil, accessed: nil, attributes: "",
+                             displayNameOverride: ".. = " + parentName,
+                             parentCluster: parentCluster)
+        return [dotdot, dot]
     }
 
     private func computeFreeSpace(_ volume: FSVolume) {
@@ -563,30 +873,44 @@ final class FileSystemBrowser: ObservableObject {
     }
 
     func enter(_ entry: FSEntry, using state: AppState) {
-        guard entry.isDirectory, entry.firstCluster >= 2, let volume else { return }
+        guard entry.isDirectory, entry.firstCluster >= 2 else { return }
         clusterStack.append(entry.firstCluster)
         pathNames.append(entry.name)
-        entries = volume.listDirectory(cluster: entry.firstCluster)
+        reload(using: state)
         selectedEntryID = nil
     }
 
     func goUp(using state: AppState) {
-        guard clusterStack.count > 1, let volume else { return }
-        clusterStack.removeLast()
-        pathNames.removeLast()
-        entries = volume.listDirectory(cluster: clusterStack[clusterStack.count - 1])
+        guard clusterStack.count > 1 else { return }
+        goUpTo(cluster: clusterStack[clusterStack.count - 2], using: state)
+    }
+
+    /// Pops the navigation stack back to a recorded parent cluster.
+    private func goUpTo(cluster: UInt32, using state: AppState) {
+        guard let index = clusterStack.lastIndex(of: cluster),
+              index < clusterStack.count - 1 else { return }
+        clusterStack.removeSubrange((index + 1)..<clusterStack.count)
+        if pathNames.count > index { pathNames.removeSubrange(index..<pathNames.count) }
+        reload(using: state)
         selectedEntryID = nil
     }
 
-    /// "Open": folders navigate in, files reveal their data.
+    /// "Open": folders navigate in, files reveal their data, ".." goes up.
     func openEntry(_ entry: FSEntry, using state: AppState) {
-        if entry.isDirectory { enter(entry, using: state) } else { reveal(entry, using: state) }
+        if let parent = entry.parentCluster {
+            goUpTo(cluster: parent, using: state)
+        } else if entry.isDirectory {
+            enter(entry, using: state)
+        } else {
+            reveal(entry, using: state)
+        }
     }
 
     /// Selects the entry's data in the hex view, centred on screen.
     func reveal(_ entry: FSEntry, using state: AppState) {
         selectedEntryID = entry.id
-        guard entry.dataOffset > 0, entry.dataOffset < state.size else { return }
+        guard entry.dataOffset >= 0, entry.dataOffset < state.size,
+              entry.isSystem || entry.dataOffset > 0 else { return }
         let end = min(entry.dataOffset + entry.revealLength, state.size) - 1
         state.anchor = max(entry.dataOffset, end)
         state.cursor = entry.dataOffset
@@ -598,7 +922,7 @@ final class FileSystemBrowser: ObservableObject {
 
     /// Navigate → jump to the directory record itself.
     func gotoDirectoryEntry(_ entry: FSEntry, using state: AppState) {
-        guard entry.entryOffset > 0 else { return }
+        guard entry.entryOffset > 0, !entry.isSystem else { return }
         state.anchor = min(entry.entryOffset + entry.entryLength - 1, state.size - 1)
         state.cursor = entry.entryOffset
         state.scrollCentered = true
@@ -614,8 +938,82 @@ final class FileSystemBrowser: ObservableObject {
             clusterList = []
             return
         }
-        clusterListEntry = entry
-        clusterList = volume.clusterChain(start: entry.firstCluster)
+        clusterList = volume.clusterChain(for: entry)
+        clusterListTotal = volume.clusterChainLength(for: entry)
+    }
+
+    /// Cluster → owning file lookup, via binary search over the sorted index.
+    func owner(cluster: UInt32) -> FileOwner? {
+        var low = 0
+        var high = owners.count - 1
+        while low <= high {
+            let mid = (low + high) / 2
+            let span = owners[mid]
+            if cluster < span.start {
+                high = mid - 1
+            } else if cluster >= span.end {
+                low = mid + 1
+            } else {
+                return span.owner
+            }
+        }
+        return nil
+    }
+
+    /// Owning file of an absolute byte offset, or nil inside the system area.
+    func owner(atOffset offset: Int) -> FileOwner? {
+        guard let cluster = volume?.clusterNumber(atOffset: offset) else { return nil }
+        return owner(cluster: cluster)
+    }
+
+    /// Walks the whole directory tree in the background, recording which file
+    /// owns each cluster run. Powers the "cursor is inside <file>" readout.
+    private func startOwnerScan() {
+        guard let volume else { return }
+        scanCancelled = false
+        scanToken &+= 1
+        let token = scanToken
+        scanning = true
+        let rootCluster = volume.info.rootCluster
+
+        DispatchQueue.global(qos: .utility).async { [weak self] in
+            var collected: [OwnerSpan] = []
+            var visitedDirs: Set<UInt32> = []
+            var queue: [(cluster: UInt32, path: [String])] = [(rootCluster, [])]
+            var head = 0
+            var processedEntries = 0
+            let maxEntries = 200_000
+
+            while head < queue.count, processedEntries < maxEntries {
+                if self?.scanCancelled == true { break }
+                let current = queue[head]
+                head += 1
+                guard !visitedDirs.contains(current.cluster) else { continue }
+                visitedDirs.insert(current.cluster)
+
+                let listing = volume.listDirectory(cluster: current.cluster)
+                processedEntries += listing.count
+                for entry in listing where !entry.isSystem {
+                    guard entry.firstCluster >= 2 else { continue }
+                    for span in volume.clusterSpans(for: entry) {
+                        collected.append(OwnerSpan(start: span.start, end: span.end,
+                                                   owner: FileOwner(name: entry.name,
+                                                                    parentPath: current.path,
+                                                                    isDirectory: entry.isDirectory)))
+                    }
+                    if entry.isDirectory, current.path.count < 32 {
+                        queue.append((entry.firstCluster, current.path + [entry.name]))
+                    }
+                }
+            }
+            collected.sort { $0.start < $1.start }
+
+            DispatchQueue.main.async {
+                guard let self, self.scanToken == token else { return }
+                self.owners = collected
+                self.scanning = false
+            }
+        }
     }
 
     func jumpToCluster(_ cluster: UInt32, using state: AppState) {
@@ -643,8 +1041,7 @@ final class FileSystemBrowser: ObservableObject {
         status = L.f("Recovering %@…", entry.name)
         DispatchQueue.global(qos: .userInitiated).async {
             do {
-                try volume.copyChain(start: entry.firstCluster,
-                                     logicalSize: entry.size, to: url)
+                try volume.copyChain(entry: entry, to: url)
                 DispatchQueue.main.async {
                     self.status = L.f("Recovered %@ (%@)", entry.name,
                                       state.byteCountString(Int(entry.size)))

@@ -22,6 +22,11 @@ struct ContentView: View {
                     Divider()
                 }
                 HStack(spacing: 0) {
+                    if state.showFileSystem {
+                        FSInfoPanelView(browser: state.fsBrowser)
+                            .frame(width: 240)
+                        Divider()
+                    }
                     HexEditorView()
                         .frame(minWidth: 360, maxWidth: .infinity, maxHeight: .infinity)
                 }

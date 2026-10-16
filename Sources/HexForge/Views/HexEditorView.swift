@@ -69,6 +69,9 @@ final class HexCanvasView: NSView {
     }()
     private lazy var rowHeight: CGFloat = lineHeight + 4
 
+    /// Height of the column header band pinned to the top of the viewport.
+    private var headerHeight: CGFloat { rowHeight + 2 }
+
     override var isFlipped: Bool { true }
     override var acceptsFirstResponder: Bool { true }
 
@@ -80,7 +83,16 @@ final class HexCanvasView: NSView {
     private var addressUnit: Int { max(1, state?.addressUnit ?? 1) }
     private var addressPrefix: String { state?.addressPrefix ?? "" }
     private var addressDigits: Int { max(8, state?.addressDigits ?? 8) }
-    private var offsetWidth: CGFloat { CGFloat(addressDigits + addressPrefix.count) * charWidth }
+    /// Decimal digits for the offset column (WinHex shows 10 digits).
+    private var decimalDigits: Int {
+        let units = max(1, (state?.size ?? 0) / addressUnit)
+        return max(10, String(units).count)
+    }
+    /// Digit count actually used, depending on hex/decimal addressing.
+    private var addressWidth: Int {
+        state?.decimalAddress == true ? decimalDigits : addressDigits
+    }
+    private var offsetWidth: CGFloat { CGFloat(addressWidth + addressPrefix.count) * charWidth }
     private var hexOriginX: CGFloat { 12 + offsetWidth + charWidth * 2 }
 
     private func hexColumnX(_ column: Int) -> CGFloat {
@@ -106,7 +118,7 @@ final class HexCanvasView: NSView {
     // MARK: Refresh
 
     func refresh() {
-        let height = CGFloat(totalRows) * rowHeight + 6
+        let height = headerHeight + CGFloat(totalRows) * rowHeight + 6
         let visibleWidth = enclosingScrollView?.contentSize.width ?? contentWidth
         let width = max(contentWidth, visibleWidth)
         if abs(frame.width - width) > 0.5 || abs(frame.height - height) > 0.5 {
@@ -129,14 +141,14 @@ final class HexCanvasView: NSView {
             // in the viewport so the surrounding bytes are readable.
             state.scrollCentered = false
             let viewportHeight = enclosingScrollView?.contentView.bounds.height ?? bounds.height
-            var y = CGFloat(row) * rowHeight - (viewportHeight - rowHeight) / 2
+            var y = headerHeight + CGFloat(row) * rowHeight - (viewportHeight - rowHeight) / 2
             y = max(0, min(y, bounds.height - viewportHeight))
             scroll(NSPoint(x: 0, y: y))
             return
         }
         // Full-width rect keeps the caret vertically visible without resetting the
         // horizontal scroll position.
-        let rect = NSRect(x: 0, y: CGFloat(row) * rowHeight,
+        let rect = NSRect(x: 0, y: headerHeight + CGFloat(row) * rowHeight,
                           width: max(1, bounds.width), height: rowHeight)
         scrollToVisible(rect)
     }
@@ -146,6 +158,54 @@ final class HexCanvasView: NSView {
         if window != nil {
             window?.makeFirstResponder(self)
         }
+        observeClipView()
+    }
+
+    deinit {
+        NotificationCenter.default.removeObserver(self)
+    }
+
+    /// The column header is drawn at `visibleRect.minY` so it stays pinned while
+    /// scrolling. Redraw the viewport whenever the clip view scrolls.
+    private func observeClipView() {
+        guard let clip = enclosingScrollView?.contentView else { return }
+        NotificationCenter.default.removeObserver(self, name: NSView.boundsDidChangeNotification, object: nil)
+        clip.postsBoundsChangedNotifications = true
+        NotificationCenter.default.addObserver(
+            self, selector: #selector(clipBoundsChanged),
+            name: NSView.boundsDidChangeNotification, object: clip)
+    }
+
+    @objc private func clipBoundsChanged() {
+        setNeedsDisplay(visibleRect)
+    }
+
+    // Reports the byte under the pointer so the file-system info panel can show
+    // the current cluster, its owning file and the parent chain.
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        for area in trackingAreas { removeTrackingArea(area) }
+        addTrackingArea(NSTrackingArea(
+            rect: .zero,
+            options: [.mouseMoved, .mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect],
+            owner: self,
+            userInfo: nil))
+        observeClipView()
+    }
+
+    override func mouseMoved(with event: NSEvent) {
+        let point = convert(event.locationInWindow, from: nil)
+        let headerTop = visibleRect.minY
+        let inHeader = point.y >= headerTop && point.y < headerTop + headerHeight
+        let newOffset: Int? = inHeader ? nil : offset(at: point)
+        if state?.hoverOffset != newOffset {
+            state?.hoverOffset = newOffset
+        }
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        state?.hoverOffset = nil
     }
 
     // Redraw the caret whenever the canvas gains or loses focus so it does not
@@ -170,16 +230,16 @@ final class HexCanvasView: NSView {
         let document = state.document
 
         let rh = rowHeight
-        let firstRow = max(0, Int(floor(dirtyRect.minY / rh)))
-        let lastRow = min(totalRows - 1, Int(ceil(dirtyRect.maxY / rh)))
-        guard firstRow <= lastRow else { return }
+        let header = headerHeight
+        let firstRow = max(0, Int(floor((dirtyRect.minY - header) / rh)))
+        let lastRow = min(totalRows - 1, Int(ceil((dirtyRect.maxY - header) / rh)))
 
         let hasSelection = state.hasSelection
         let selLo = hasSelection ? min(state.cursor, state.anchor) : -1
         let selHi = hasSelection ? max(state.cursor, state.anchor) : -1
 
-        for row in firstRow...lastRow {
-            let y = CGFloat(row) * rh
+        for row in firstRow..<max(firstRow, lastRow + 1) {
+            let y = header + CGFloat(row) * rh
             let base = row * bytesPerRow
 
             if row % 2 == 1 {
@@ -187,11 +247,18 @@ final class HexCanvasView: NSView {
                 NSRect(x: 0, y: y, width: bounds.width, height: rh).fill()
             }
 
-            // Mark sector (and more strongly, cluster) boundaries in disk modes.
-            if state.addressMode != .fileOffset, row > 0, base % max(1, state.sectorSize) == 0 {
-                let isClusterStart = base % max(1, state.clusterSize) == 0
-                NSColor(calibratedWhite: 1.0, alpha: isClusterStart ? 0.22 : 0.10).setFill()
-                NSRect(x: 0, y: y, width: bounds.width, height: 1).fill()
+            // Mark sector (and more strongly, cluster) boundaries. The parsed
+            // file system's geometry wins over the manual sector/cluster sizing.
+            let sectorStep = state.fsSectorSize > 0
+                ? state.fsSectorSize
+                : (state.addressMode != .fileOffset ? state.sectorSize : 0)
+            let clusterStep = state.fsClusterSize > 0
+                ? state.fsClusterSize
+                : (state.addressMode != .fileOffset ? state.clusterSize : 0)
+            if row > 0, sectorStep > 0, base % sectorStep == 0 {
+                let isClusterStart = clusterStep > 0 && base % clusterStep == 0
+                NSColor(calibratedWhite: 1.0, alpha: isClusterStart ? 0.35 : 0.16).setFill()
+                NSRect(x: 0, y: y, width: bounds.width, height: isClusterStart ? 2 : 1).fill()
             }
 
             // Highlight bytes that differ from the comparison file.
@@ -222,7 +289,7 @@ final class HexCanvasView: NSView {
             let count = min(bytesPerRow, max(0, (state.size - base)))
             let rowBytes = count > 0 ? document.bytes(in: base..<(base + count)) : []
 
-            let offsetString = addressPrefix + paddedHex(base / addressUnit, width: addressDigits)
+            let offsetString = addressText(base)
             draw(offsetString, x: 12, y: y, color: HexTheme.offsetText)
             draw(hexString(rowBytes, total: bytesPerRow), x: hexOriginX, y: y, color: HexTheme.hexText)
             if showAscii {
@@ -231,6 +298,37 @@ final class HexCanvasView: NSView {
         }
 
         drawCaret()
+        drawHeader()
+    }
+
+    /// Renders the pinned column header: the clickable "Offset" label followed by
+    /// the per-byte column numbers (0-F in hex, 0-15 in decimal).
+    private func drawHeader() {
+        guard let state else { return }
+        let top = visibleRect.minY
+        let h = headerHeight
+
+        HexTheme.altRow.setFill()
+        NSRect(x: 0, y: top, width: bounds.width, height: h).fill()
+        HexTheme.offsetText.withAlphaComponent(0.45).setFill()
+        NSRect(x: 0, y: top + h - 1, width: bounds.width, height: 1).fill()
+
+        let label = state.decimalAddress ? L.t("Decimal") : L.t("Offset")
+        draw(label, x: 12, y: top, color: HexTheme.caret)
+        for column in 0..<bytesPerRow {
+            let text = state.decimalAddress
+                ? String(column)
+                : String(column, radix: 16, uppercase: true)
+            draw(text, x: hexColumnX(column), y: top, color: HexTheme.offsetText)
+        }
+    }
+
+    private func addressText(_ byteOffset: Int) -> String {
+        let value = byteOffset / addressUnit
+        if state?.decimalAddress == true {
+            return addressPrefix + paddedDecimal(value, width: decimalDigits)
+        }
+        return addressPrefix + paddedHex(value, width: addressDigits)
     }
 
     private func draw(_ string: String, x: CGFloat, y: CGFloat, color: NSColor) {
@@ -240,6 +338,12 @@ final class HexCanvasView: NSView {
 
     private func paddedHex(_ value: Int, width: Int) -> String {
         var s = String(value, radix: 16, uppercase: true)
+        while s.count < width { s = "0" + s }
+        return s
+    }
+
+    private func paddedDecimal(_ value: Int, width: Int) -> String {
+        var s = String(max(0, value))
         while s.count < width { s = "0" + s }
         return s
     }
@@ -277,7 +381,7 @@ final class HexCanvasView: NSView {
         guard let state, state.size > 0, window?.firstResponder === self else { return }
         let row = state.cursor / bytesPerRow
         let column = state.cursor % bytesPerRow
-        let y = CGFloat(row) * rowHeight
+        let y = headerHeight + CGFloat(row) * rowHeight
 
         let rect: NSRect
         if state.activePane == .hex {
@@ -296,6 +400,17 @@ final class HexCanvasView: NSView {
     override func mouseDown(with event: NSEvent) {
         window?.makeFirstResponder(self)
         let point = convert(event.locationInWindow, from: nil)
+
+        // Clicking the fixed "Offset" label toggles hex/decimal addressing.
+        let headerTop = visibleRect.minY
+        if point.y >= headerTop, point.y < headerTop + headerHeight {
+            if point.x < hexOriginX, let state {
+                state.decimalAddress.toggle()
+                needsDisplay = true
+            }
+            return
+        }
+
         state?.activePane = point.x >= asciiOriginX && showAscii ? .ascii : .hex
         state?.setCursor(offset(at: point), extend: event.modifierFlags.contains(.shift))
         autoscroll(with: event)
@@ -308,7 +423,7 @@ final class HexCanvasView: NSView {
     }
 
     private func offset(at point: NSPoint) -> Int {
-        let row = max(0, Int(point.y / rowHeight))
+        let row = max(0, Int((point.y - headerHeight) / rowHeight))
         let base = row * bytesPerRow
         let size = state?.size ?? 0
 

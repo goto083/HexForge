@@ -232,6 +232,15 @@ final class AppState: ObservableObject {
     /// Browsing state for the file system panel; reset when a document loads.
     let fsBrowser = FileSystemBrowser()
 
+    /// Geometry reported by the parsed file system (0 = none). Drives the
+    /// sector / cluster boundary lines drawn in the hex view.
+    @Published var fsSectorSize = 0
+    @Published var fsClusterSize = 0
+    /// Byte offset currently under the pointer, for the info panel.
+    @Published var hoverOffset: Int? = nil
+    /// true = decimal offsets and 0-15 column headers in the hex view.
+    @Published var decimalAddress = false
+
     // Hash results
     @Published var hashScopeIsSelection = false
     @Published var hashResults: [HashResult] = []
@@ -792,6 +801,9 @@ final class AppState: ObservableObject {
         clearCompare()
         clearSearchResults()
         fsBrowser.reset()
+        fsSectorSize = 0
+        fsClusterSize = 0
+        hoverOffset = nil
         if showFileSystem { fsBrowser.open(using: self) }
         cursor = 0; anchor = 0; nibbleHigh = true
         if let signature = detectFormat() {
@@ -836,6 +848,9 @@ final class AppState: ObservableObject {
         clearCompare()
         clearSearchResults()
         fsBrowser.reset()
+        fsSectorSize = 0
+        fsClusterSize = 0
+        hoverOffset = nil
         if showFileSystem { fsBrowser.open(using: self) }
         cursor = 0; anchor = 0; nibbleHigh = true
 

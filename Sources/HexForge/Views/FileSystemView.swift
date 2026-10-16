@@ -162,18 +162,21 @@ struct FileSystemView: View {
         let selected = browser.selectedEntryID == entry.id
         return HStack(spacing: 0) {
             HStack(spacing: 6) {
-                Image(systemName: entry.isDirectory ? "folder.fill" : "doc")
-                    .foregroundColor(entry.isDirectory ? .accentColor : .secondary)
+                Image(systemName: iconName(entry))
+                    .foregroundColor(iconColor(entry))
                     .frame(width: 14)
-                Text(entry.name)
+                Text(entry.displayNameOverride ?? entry.name)
                     .lineLimit(1)
                     .truncationMode(.middle)
+                    .foregroundColor(entry.isSystem ? .orange : .primary)
             }
             .frame(width: colName, alignment: .leading)
 
             Text(entry.ext)
                 .frame(width: colExt, alignment: .leading)
-            Text(entry.isDirectory ? "" : state.byteCountString(Int(entry.size)))
+            Text(entry.isDirectory && entry.parentCluster == nil
+                 ? ""
+                 : state.byteCountString(Int(entry.size)))
                 .frame(width: colSize, alignment: .trailing)
             Text(entry.created.map { Self.dateTime.string(from: $0) } ?? "")
                 .frame(width: colDate, alignment: .leading)
@@ -195,14 +198,28 @@ struct FileSystemView: View {
         .contextMenu {
             Button(L.t("Open")) { browser.openEntry(entry, using: state) }
             Button(L.t("Recover / Copy…")) { browser.recover(entry, using: state) }
-                .disabled(entry.isDirectory)
+                .disabled(entry.isDirectory || entry.isSystem || entry.firstCluster < 2)
             Divider()
             Menu(L.t("Navigate")) {
                 Button(L.t("List Clusters")) { browser.listClusters(entry) }
-                    .disabled(entry.isDirectory)
+                    .disabled(entry.isSystem || entry.firstCluster < 2)
                 Button(L.t("Go to Directory Entry")) { browser.gotoDirectoryEntry(entry, using: state) }
+                    .disabled(entry.isSystem || entry.entryOffset <= 0)
             }
         }
+    }
+
+    private func iconName(_ entry: FSEntry) -> String {
+        if entry.isSystem { return "gearshape.fill" }
+        if entry.parentCluster != nil { return "arrow.uturn.upward" }
+        if entry.isDirectory { return "folder.fill" }
+        return "doc"
+    }
+
+    private func iconColor(_ entry: FSEntry) -> Color {
+        if entry.isSystem { return .orange }
+        if entry.parentCluster != nil { return .blue }
+        return entry.isDirectory ? .accentColor : .secondary
     }
 }
 
@@ -220,7 +237,7 @@ struct ClusterListView: View {
                 Text(L.f("Clusters of %@", browser.clusterListEntry?.name ?? ""))
                     .font(.headline)
                 Spacer()
-                Text(L.f("%d cluster(s)", browser.clusterList.count))
+                Text(L.f("%d of %d cluster(s)", browser.clusterList.count, browser.clusterListTotal))
                     .font(.caption)
                     .foregroundColor(.secondary)
             }
