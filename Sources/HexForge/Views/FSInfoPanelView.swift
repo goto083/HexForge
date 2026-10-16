@@ -2,13 +2,11 @@ import SwiftUI
 
 /// Left-hand readout shown while a file system is parsed (WinHex's info panel).
 ///
-/// As the pointer moves over the hex view it reports the cluster under the
-/// cursor, the file that cluster belongs to and that file's full parent chain.
+/// When a byte is clicked in the hex view it reports the cluster at that offset,
+/// the file that cluster belongs to and that file's full parent chain.
 struct FSInfoPanelView: View {
     @EnvironmentObject var state: AppState
     @ObservedObject var browser: FileSystemBrowser
-
-    private var probeOffset: Int { state.hoverOffset ?? state.cursor }
 
     var body: some View {
         ScrollView {
@@ -30,9 +28,6 @@ struct FSInfoPanelView: View {
     @ViewBuilder
     private func content(_ volume: FSVolume) -> some View {
         let info = volume.info
-        let cluster = volume.clusterNumber(atOffset: probeOffset)
-        let systemArea = cluster == nil ? volume.systemAreaName(atOffset: probeOffset) : nil
-        let owner = browser.owner(atOffset: probeOffset)
 
         line(L.t("File system"),
              info.kind.rawValue + (browser.label.isEmpty ? "" : "  ·  " + browser.label),
@@ -48,20 +43,31 @@ struct FSInfoPanelView: View {
 
         Divider().padding(.vertical, 1)
 
-        line(L.t("Offset"), "0x" + String(probeOffset, radix: 16).uppercased() + "  ·  \(probeOffset)", mono: true)
-        line(L.t("Logical sector"), "\(probeOffset / max(1, info.bytesPerSector))", mono: true)
+        // The cluster / owner readout only updates when a byte is clicked.
+        if let probeOffset = state.selectedOffset {
+            let cluster = volume.clusterNumber(atOffset: probeOffset)
+            let systemArea = cluster == nil ? volume.systemAreaName(atOffset: probeOffset) : nil
+            let owner = browser.owner(atOffset: probeOffset)
 
-        if let cluster {
-            line(L.t("Cluster"), "\(cluster)", mono: true, accent: .primary)
+            line(L.t("Offset"), "0x" + String(probeOffset, radix: 16).uppercased() + "  ·  \(probeOffset)", mono: true)
+            line(L.t("Logical sector"), "\(probeOffset / max(1, info.bytesPerSector))", mono: true)
+
+            if let cluster {
+                line(L.t("Cluster"), "\(cluster)", mono: true, accent: .primary)
+            } else {
+                line(L.t("Cluster"), systemArea ?? L.t("Outside volume"))
+            }
+
+            line(L.t("Owned by"), owner?.name ?? (browser.scanning ? L.t("Scanning…") : L.t("Free space")))
+            line(L.t("Parent chain"), owner?.directoryPath ?? "—", mono: true)
+            if let owner, owner.isDirectory {
+                Text(L.t("Directory"))
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
+            }
         } else {
-            line(L.t("Cluster"), systemArea ?? L.t("Outside volume"))
-        }
-
-        line(L.t("Owned by"), owner?.name ?? (browser.scanning ? L.t("Scanning…") : L.t("Free space")))
-        line(L.t("Parent chain"), owner?.directoryPath ?? "—", mono: true)
-        if let owner, owner.isDirectory {
-            Text(L.t("Directory"))
-                .font(.caption2)
+            Text(L.t("Click a byte in the hex view to inspect its cluster and owning file."))
+                .font(.caption)
                 .foregroundColor(.secondary)
         }
 

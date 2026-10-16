@@ -5,8 +5,19 @@ struct ContentView: View {
 
     var body: some View {
         HStack(spacing: 0) {
-            SidebarView()
-                .frame(width: 230)
+            // Left column: file summary, and (when a file system is parsed) the
+            // WinHex-style cluster / owner readout where the bookmarks used to be.
+            VStack(spacing: 0) {
+                SidebarView()
+                if state.showFileSystem {
+                    Divider()
+                    FSInfoPanelView(browser: state.fsBrowser)
+                        .frame(maxHeight: .infinity)
+                } else {
+                    Spacer(minLength: 0)
+                }
+            }
+            .frame(width: 230)
             Divider()
             VStack(spacing: 0) {
                 TopBarView()
@@ -21,16 +32,8 @@ struct ContentView: View {
                         .frame(height: 200)
                     Divider()
                 }
-                HStack(spacing: 0) {
-                    if state.showFileSystem {
-                        FSInfoPanelView(browser: state.fsBrowser)
-                            .frame(width: 240)
-                        Divider()
-                    }
-                    HexEditorView()
-                        .frame(minWidth: 360, maxWidth: .infinity, maxHeight: .infinity)
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                HexEditorView()
+                    .frame(minWidth: 360, maxWidth: .infinity, maxHeight: .infinity)
                 Divider()
                 StatusBarView()
             }
@@ -39,7 +42,8 @@ struct ContentView: View {
         .frame(minWidth: 860, minHeight: 520)
         .sheet(isPresented: $state.showFind) { FindView() }
         .sheet(isPresented: $state.showSearch) { SearchView() }
-        .sheet(isPresented: $state.showGoto) { GotoView() }
+        .sheet(isPresented: $state.showGotoSector) { GotoSectorView() }
+        .sheet(isPresented: $state.showGotoOffset) { GotoOffsetView() }
         .sheet(isPresented: $state.showFill) { FillView() }
         .sheet(isPresented: $state.showInsert) { InsertView() }
         .sheet(isPresented: $state.showHash) { HashView() }
@@ -75,9 +79,14 @@ struct TopBarView: View {
 
             Divider().frame(height: 18)
 
-            Button(action: { state.showGoto = true }) {
+            Menu {
+                Button(L.t("Goto Sector…")) { state.showGotoSector = true }
+                Button(L.t("Goto Offset…")) { state.showGotoOffset = true }
+            } label: {
                 Label(L.t("Goto"), systemImage: "arrow.right.to.line")
             }
+            .menuStyle(.borderlessButton)
+            .fixedSize()
             Button(action: state.openSearch) {
                 Label(L.t("Search"), systemImage: "magnifyingglass")
             }

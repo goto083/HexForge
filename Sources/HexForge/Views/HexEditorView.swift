@@ -180,32 +180,12 @@ final class HexCanvasView: NSView {
         setNeedsDisplay(visibleRect)
     }
 
-    // Reports the byte under the pointer so the file-system info panel can show
-    // the current cluster, its owning file and the parent chain.
+    // The info panel is driven by the last clicked byte, not by pointer movement,
+    // so the canvas keeps no mouse-tracking area of its own.
 
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
-        for area in trackingAreas { removeTrackingArea(area) }
-        addTrackingArea(NSTrackingArea(
-            rect: .zero,
-            options: [.mouseMoved, .mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect],
-            owner: self,
-            userInfo: nil))
         observeClipView()
-    }
-
-    override func mouseMoved(with event: NSEvent) {
-        let point = convert(event.locationInWindow, from: nil)
-        let headerTop = visibleRect.minY
-        let inHeader = point.y >= headerTop && point.y < headerTop + headerHeight
-        let newOffset: Int? = inHeader ? nil : offset(at: point)
-        if state?.hoverOffset != newOffset {
-            state?.hoverOffset = newOffset
-        }
-    }
-
-    override func mouseExited(with event: NSEvent) {
-        state?.hoverOffset = nil
     }
 
     // Redraw the caret whenever the canvas gains or loses focus so it does not
@@ -413,12 +393,14 @@ final class HexCanvasView: NSView {
 
         state?.activePane = point.x >= asciiOriginX && showAscii ? .ascii : .hex
         state?.setCursor(offset(at: point), extend: event.modifierFlags.contains(.shift))
+        state?.selectedOffset = state?.cursor
         autoscroll(with: event)
     }
 
     override func mouseDragged(with event: NSEvent) {
         let point = convert(event.locationInWindow, from: nil)
         state?.setCursor(offset(at: point), extend: true)
+        state?.selectedOffset = state?.cursor
         autoscroll(with: event)
     }
 

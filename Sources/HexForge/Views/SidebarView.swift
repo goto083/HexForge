@@ -22,57 +22,8 @@ struct SidebarView: View {
             .padding(.horizontal, 12)
             .padding(.bottom, 12)
 
-            Divider()
-
-            HStack {
-                Text(L.t("Bookmarks"))
-                    .font(.headline)
-                Spacer()
-                Button {
-                    state.addBookmarkAtCursor()
-                } label: {
-                    Image(systemName: "plus")
-                }
-                .buttonStyle(.borderless)
-                .help(L.t("Add bookmark at cursor"))
-            }
-            .padding(.horizontal, 12)
-            .padding(.top, 10)
-            .padding(.bottom, 4)
-
-            if state.bookmarks.isEmpty {
-                Text(L.t("No bookmarks. Press ⌘D to add one."))
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 6)
-                Spacer()
-            } else {
-                List {
-                    ForEach(state.bookmarks) { bookmark in
-                        Button {
-                            state.goto(offset: bookmark.offset)
-                        } label: {
-                            HStack {
-                                Image(systemName: "bookmark.fill").foregroundColor(.accentColor)
-                                Text(bookmark.name).font(.system(.body, design: .monospaced))
-                                Spacer()
-                                Text("\(bookmark.offset)")
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
-                            }
-                        }
-                        .buttonStyle(.plain)
-                        .contextMenu {
-                            Button(L.t("Delete")) {
-                                state.bookmarks.removeAll { $0.id == bookmark.id }
-                            }
-                        }
-                    }
-                }
-                .listStyle(.sidebar)
-            }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .background(Color(nsColor: .windowBackgroundColor))
     }
 

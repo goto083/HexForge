@@ -109,7 +109,8 @@ final class AppState: ObservableObject {
 
     // Panels
     @Published var showFind = false
-    @Published var showGoto = false
+    @Published var showGotoSector = false
+    @Published var showGotoOffset = false
     @Published var showFill = false
     @Published var showInsert = false
     @Published var showHash = false
@@ -236,8 +237,9 @@ final class AppState: ObservableObject {
     /// sector / cluster boundary lines drawn in the hex view.
     @Published var fsSectorSize = 0
     @Published var fsClusterSize = 0
-    /// Byte offset currently under the pointer, for the info panel.
-    @Published var hoverOffset: Int? = nil
+    /// Byte offset chosen by the last mouse click, for the info panel. Hovering
+    /// or moving the caret with the keyboard deliberately does not update it.
+    @Published var selectedOffset: Int? = nil
     /// true = decimal offsets and 0-15 column headers in the hex view.
     @Published var decimalAddress = false
 
@@ -803,7 +805,7 @@ final class AppState: ObservableObject {
         fsBrowser.reset()
         fsSectorSize = 0
         fsClusterSize = 0
-        hoverOffset = nil
+        selectedOffset = nil
         if showFileSystem { fsBrowser.open(using: self) }
         cursor = 0; anchor = 0; nibbleHigh = true
         if let signature = detectFormat() {
@@ -850,7 +852,7 @@ final class AppState: ObservableObject {
         fsBrowser.reset()
         fsSectorSize = 0
         fsClusterSize = 0
-        hoverOffset = nil
+        selectedOffset = nil
         if showFileSystem { fsBrowser.open(using: self) }
         cursor = 0; anchor = 0; nibbleHigh = true
 

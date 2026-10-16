@@ -131,7 +131,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         editMenu.addItem(.separator())
         editMenu.addItem(item(L.t("Search…"), #selector(showSearch(_:)), "f", [.command]))
         editMenu.addItem(item(L.t("Find & Replace…"), #selector(showFind(_:)), "f", [.command, .option]))
-        editMenu.addItem(item(L.t("Goto Offset…"), #selector(showGoto(_:)), "l", [.command]))
+        editMenu.addItem(item(L.t("Goto Sector…"), #selector(showGotoSector(_:)), "g", [.control]))
+        editMenu.addItem(item(L.t("Goto Offset…"), #selector(showGotoOffset(_:)), "g", [.option]))
         editMenu.addItem(item(L.t("Fill Selection…"), #selector(showFill(_:)), "f", [.command, .shift]))
         editMenu.addItem(.separator())
         editMenu.addItem(item(L.t("Insert Bytes…"), #selector(showInsert(_:)), "i", [.command, .option]))
@@ -253,7 +254,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
     @objc private func showSearch(_ sender: Any?) { state.openSearch() }
     @objc private func showFind(_ sender: Any?) { state.showFind = true }
-    @objc private func showGoto(_ sender: Any?) { state.showGoto = true }
+    @objc private func showGotoSector(_ sender: Any?) { state.showGotoSector = true }
+    @objc private func showGotoOffset(_ sender: Any?) { state.showGotoOffset = true }
     @objc private func showFill(_ sender: Any?) { state.showFill = true }
     @objc private func showInsert(_ sender: Any?) { state.showInsert = true }
     @objc private func deleteSelectedBytes(_ sender: Any?) { state.deleteSelection() }

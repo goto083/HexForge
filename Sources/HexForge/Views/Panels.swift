@@ -59,25 +59,169 @@ struct FindView: View {
     }
 }
 
-// MARK: - Goto offset
+// MARK: - Goto sector (⌃G)
 
-struct GotoView: View {
+/// WinHex-style “Goto Sector” box: enter a decimal sector number and see the
+/// cluster it maps to. Logical and physical addressing resolve to the same byte
+/// offset for files and disk images.
+struct GotoSectorView: View {
     @EnvironmentObject var state: AppState
     @Environment(\.dismiss) private var dismiss
 
-    @State private var text = ""
+    @State private var physical = false
+    @State private var text = "0"
     @State private var error: String?
+
+    private var sectorSize: Int {
+        state.fsSectorSize > 0 ? state.fsSectorSize : max(1, state.sectorSize)
+    }
+    private var sectorsPerCluster: Int {
+        if state.fsSectorSize > 0, state.fsClusterSize > 0 {
+            return max(1, state.fsClusterSize / state.fsSectorSize)
+        }
+        return max(1, state.sectorsPerCluster)
+    }
+    private var sector: Int? {
+        Int(text.trimmingCharacters(in: .whitespacesAndNewlines))
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text(L.t("Goto Sector")).font(.headline)
+
+            Picker("", selection: $physical) {
+                Text(L.t("Logical (L)")).tag(false)
+                Text(L.t("Physical (P)")).tag(true)
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+
+            HStack {
+                Text(L.t("Sector:"))
+                    .frame(width: 90, alignment: .leading)
+                TextField("0", text: $text)
+                    .textFieldStyle(.roundedBorder)
+                    .font(.system(.body, design: .monospaced))
+                    .onSubmit(go)
+            }
+
+            HStack {
+                Text(L.t("= Cluster:"))
+                    .frame(width: 90, alignment: .leading)
+                Text("\((sector ?? 0) / sectorsPerCluster)")
+                    .font(.system(.body, design: .monospaced))
+                    .foregroundColor(.secondary)
+            }
+
+            if let error {
+                Text(error).font(.caption).foregroundColor(.red)
+            }
+
+            HStack {
+                Spacer()
+                Button(L.t("Cancel")) { dismiss() }.keyboardShortcut(.cancelAction)
+                Button(L.t("Go"), action: go).keyboardShortcut(.defaultAction)
+            }
+        }
+        .padding(20)
+        .frame(width: 380)
+    }
+
+    private func go() {
+        guard let sector, sector >= 0 else {
+            error = L.t("Invalid number.")
+            return
+        }
+        let offset = sector * sectorSize
+        guard offset < max(1, state.size) else {
+            error = L.f("Offset beyond end of data (%d bytes).", state.size)
+            return
+        }
+        state.goto(offset: offset)
+        dismiss()
+    }
+}
+
+// MARK: - Goto offset (⌥G)
+
+/// WinHex-style “Goto Offset” box: a decimal value in bytes or sectors, taken
+/// relative to the beginning, the current position (forwards/backwards) or the
+/// end of the data (backwards).
+struct GotoOffsetView: View {
+    @EnvironmentObject var state: AppState
+    @Environment(\.dismiss) private var dismiss
+
+    enum RelativeMode: Int, CaseIterable, Identifiable {
+        case beginning, current, currentBackward, endBackward
+        var id: Int { rawValue }
+        var title: String {
+            switch self {
+            case .beginning:       return L.t("Beginning")
+            case .current:         return L.t("Current position")
+            case .currentBackward: return L.t("Current position (backward)")
+            case .endBackward:     return L.t("End (backward)")
+            }
+        }
+    }
+
+    @State private var text = "0"
+    @State private var useSectors = false
+    @State private var relative: RelativeMode = .beginning
+    @State private var error: String?
+
+    private var unitFactor: Int {
+        useSectors ? (state.fsSectorSize > 0 ? state.fsSectorSize : max(1, state.sectorSize)) : 1
+    }
+    private var value: Int? {
+        Int(text.trimmingCharacters(in: .whitespacesAndNewlines))
+    }
+    private var result: Int {
+        let amount = (value ?? 0) * unitFactor
+        switch relative {
+        case .beginning:       return amount
+        case .current:         return state.cursor + amount
+        case .currentBackward: return state.cursor - amount
+        case .endBackward:     return max(0, state.size - amount)
+        }
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             Text(L.t("Goto Offset")).font(.headline)
 
-            TextField(L.t("Offset — hex by default, or 0d for decimal"), text: $text)
-                .textFieldStyle(.roundedBorder)
-                .font(.system(.body, design: .monospaced))
-                .onSubmit(go)
+            HStack {
+                Text(L.t("Offset:"))
+                    .frame(width: 90, alignment: .leading)
+                TextField("0", text: $text)
+                    .textFieldStyle(.roundedBorder)
+                    .font(.system(.body, design: .monospaced))
+                    .onSubmit(go)
+            }
 
-            Text(L.t("Examples: 1F40  ·  0x1F40  ·  0d8000"))
+            HStack {
+                Text(L.t("Unit"))
+                    .frame(width: 90, alignment: .leading)
+                Picker("", selection: $useSectors) {
+                    Text(L.t("Bytes")).tag(false)
+                    Text(L.t("Sectors")).tag(true)
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+            }
+
+            VStack(alignment: .leading, spacing: 6) {
+                Text(L.t("Relative to"))
+                    .foregroundColor(.secondary)
+                Picker("", selection: $relative) {
+                    ForEach(RelativeMode.allCases) { mode in
+                        Text(mode.title).tag(mode)
+                    }
+                }
+                .pickerStyle(.radioGroup)
+                .labelsHidden()
+            }
+
+            Text(L.f("Result: %d", result))
                 .font(.caption)
                 .foregroundColor(.secondary)
 
@@ -96,32 +240,17 @@ struct GotoView: View {
     }
 
     private func go() {
-        guard let offset = OffsetParser.parse(text) else {
-            error = L.t("Could not parse offset.")
+        guard let value, value >= 0 else {
+            error = L.t("Invalid number.")
             return
         }
-        guard offset < state.size else {
+        let offset = result
+        guard offset >= 0, offset < max(1, state.size) else {
             error = L.f("Offset beyond end of data (%d bytes).", state.size)
             return
         }
         state.goto(offset: offset)
         dismiss()
-    }
-}
-
-enum OffsetParser {
-    static func parse(_ raw: String) -> Int? {
-        var s = raw.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        guard !s.isEmpty else { return nil }
-        var radix = 16
-        if s.hasPrefix("0x") { s.removeFirst(2) }
-        else if s.hasPrefix("0d") { s.removeFirst(2); radix = 10 }
-        else if s.hasPrefix("0b") {
-            s.removeFirst(2)
-            return Int(s, radix: 2)
-        }
-        let cleaned = s.replacingOccurrences(of: "_", with: "")
-        return Int(cleaned, radix: radix)
     }
 }
 
