@@ -24,13 +24,13 @@ struct FSEntry: Identifiable {
     /// DOS attribute letters, e.g. "A" / "RHSA" (empty for directories).
     let attributes: String
     /// exFAT "NoFatChain" flag: the file occupies consecutive clusters.
-    let contiguous: Bool = false
+    var contiguous: Bool = false
     /// Text for the Name column when it differs from `name` (the ".." rows).
-    let displayNameOverride: String? = nil
+    var displayNameOverride: String? = nil
     /// True for synthetic entries (boot sector, FAT table, free space …).
-    let isSystem: Bool = false
+    var isSystem: Bool = false
     /// Cluster to navigate to for the synthesized ".." entry.
-    let parentCluster: UInt32? = nil
+    var parentCluster: UInt32? = nil
 }
 
 /// A run of consecutive clusters belonging to one file.

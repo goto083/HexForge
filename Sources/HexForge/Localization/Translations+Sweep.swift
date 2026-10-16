@@ -78,10 +78,7 @@ extension L10n {
         "File system": "文件系统",
 
         // File system info panel
-        "Offset": "偏移",
-        "Decimal": "十进制",
         "Logical sector": "逻辑扇区号",
-        "Cluster": "簇编号",
         "Outside volume": "卷外",
         "Owned by": "所属文件",
         "Parent chain": "完整父目录链",
