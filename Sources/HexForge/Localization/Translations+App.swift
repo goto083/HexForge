@@ -1,6 +1,14 @@
 extension L10n {
     /// AppDelegate menu titles + AppState status/alert messages.
     static let zhApp: [String: String] = [
+        // Start-up lock
+        "HexForge is locked": "HexForge 已锁定",
+        "Enter the password to start. Version %@": "请输入启动密码。版本 %@",
+        "Password": "密码",
+        "Unlock": "解锁",
+        "Quit": "退出",
+        "Incorrect password": "密码错误",
+        "Please try again.": "请重试。",
         // Menu bar
         "About HexForge": "关于 HexForge",
         "Language": "语言",

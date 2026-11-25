@@ -13,6 +13,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     // MARK: - Lifecycle
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // Nothing is built until the start-up password is accepted, so the
+        // main window never flashes behind the lock dialog.
+        guard requireStartupPassword() else { return }
+
         buildMenu()
 
         // Menu titles are AppKit strings, so they need a rebuild whenever the
@@ -54,7 +58,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             backing: .buffered,
             defer: false
         )
-        window.title = "HexForge"
+        window.title = "HexForge \(AppInfo.version)"
         window.minSize = NSSize(width: 860, height: 520)
         window.contentView = NSHostingView(rootView: root)
         _ = window.setFrameAutosaveName("HexForge.MainWindow")
@@ -70,6 +74,40 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         true
+    }
+
+    // MARK: - Start-up password
+
+    /// Blocks launch until the correct password is entered. Returns `false`
+    /// when the user prefers to quit instead.
+    private func requireStartupPassword() -> Bool {
+        while true {
+            let alert = NSAlert()
+            alert.messageText = L.t("HexForge is locked")
+            alert.informativeText = L.f("Enter the password to start. Version %@", AppInfo.displayVersion)
+
+            let field = NSSecureTextField(frame: NSRect(x: 0, y: 0, width: 260, height: 24))
+            field.placeholderString = L.t("Password")
+            alert.accessoryView = field
+            alert.addButton(withTitle: L.t("Unlock"))
+            alert.addButton(withTitle: L.t("Quit"))
+            alert.window.initialFirstResponder = field
+
+            if #available(macOS 14.0, *) {
+                NSApp.activate()
+            } else {
+                NSApp.activate(ignoringOtherApps: true)
+            }
+
+            if alert.runModal() != .alertFirstButtonReturn { return false }
+            if field.stringValue == AppInfo.startupPassword { return true }
+
+            let failure = NSAlert()
+            failure.messageText = L.t("Incorrect password")
+            failure.informativeText = L.t("Please try again.")
+            failure.addButton(withTitle: L.t("OK"))
+            failure.runModal()
+        }
     }
 
     /// Keeps the toggle flag in sync when the palette's close button is used.
