@@ -1,15 +1,15 @@
 import SwiftUI
 import AppKit
 
-/// WinHex-style search panel.
+/// WinHex-style search panel, hosted in its own draggable floating window so
+/// the hex view stays usable while a scan runs.
 ///
-/// `Find Next` stops on the first hit and leaves the window open so the match
-/// can be inspected (the hex view selects and scrolls to it), while `Find All`
-/// keeps scanning and lists every hit — optionally stopping once a hit limit is
-/// reached.
+/// Both buttons scan on a background thread and report to the floating
+/// progress palette. `Find Next` stops at the first hit, closes this dialog and
+/// lists the hit in the pane in the middle of the window; `Find All` keeps
+/// scanning and lists every hit there.
 struct SearchView: View {
     @EnvironmentObject var state: AppState
-    @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -92,11 +92,6 @@ struct SearchView: View {
                 Spacer()
             }
 
-            if state.isSearching {
-                ProgressView(value: state.searchProgress)
-                    .progressViewStyle(.linear)
-            }
-
             if !state.searchStatus.isEmpty {
                 Text(state.searchStatus)
                     .font(.callout)
@@ -104,40 +99,11 @@ struct SearchView: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
 
-            if !state.searchResults.isEmpty {
-                Divider()
-                Text(L.f("Results (%d)", state.searchTotalFound))
-                    .font(.subheadline).bold()
-                ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 2) {
-                        ForEach(state.searchResults) { hit in
-                            Button {
-                                state.jumpToSearchHit(hit)
-                            } label: {
-                                Text("0x" + String(hit.offset, radix: 16).uppercased())
-                                    .font(.system(.body, design: .monospaced))
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                                    .contentShape(Rectangle())
-                            }
-                            .buttonStyle(.plain)
-                            .foregroundColor(.primary)
-                        }
-                    }
-                }
-                .frame(height: 180)
-                .background(Color(nsColor: .textBackgroundColor))
-                .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.secondary.opacity(0.3)))
-                .clipShape(RoundedRectangle(cornerRadius: 6))
-                Text(L.t("Click a result to jump to it."))
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-            }
-
             Divider()
 
             HStack {
                 Button(L.t("Find Next")) { state.searchFindNext() }
-                    .disabled(!state.searchPatternIsValid)
+                    .disabled(state.isSearching || !state.searchPatternIsValid)
                 Button(L.t("Find All")) { state.searchFindAll() }
                     .disabled(state.isSearching || !state.searchPatternIsValid)
                 if state.isSearching {
@@ -145,13 +111,13 @@ struct SearchView: View {
                 }
                 Spacer()
                 Button(L.t("Close")) {
-                    state.cancelSearch()
-                    dismiss()
+                    // A running scan keeps going in its own progress palette.
+                    state.showSearch = false
                 }
                 .keyboardShortcut(.cancelAction)
             }
         }
         .padding(20)
-        .frame(width: 560)
+        .frame(width: 560, alignment: .topLeading)
     }
 }

@@ -136,6 +136,7 @@ enum SearchEngine {
                          document: HexDocument,
                          in range: Range<Int>,
                          options: SearchOptions,
+                         progress: ((_ fraction: Double, _ scannedOffset: Int, _ hitCount: Int) -> Void)? = nil,
                          isCancelled: (() -> Bool)? = nil) -> Int? {
         let length = pattern.count
         guard length > 0 else { return nil }
@@ -166,8 +167,10 @@ enum SearchEngine {
 
             if windowStart <= low { break }
             windowEnd = windowStart + (length - 1)
+            progress?(Double(high - windowEnd) / Double(high - low), windowEnd, 0)
         }
 
+        progress?(1, low, 0)
         return nil
     }
 }

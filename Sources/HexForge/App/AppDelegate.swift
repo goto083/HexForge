@@ -7,6 +7,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     let state = AppState()
     private var window: NSWindow!
     private var interpreterPanel: NSPanel?
+    private var searchPanel: NSPanel?
     private var searchProgressPanel: NSPanel?
     private var cancellables: Set<AnyCancellable> = []
 
@@ -31,6 +32,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 L10n.language = language
                 self?.buildMenu()
                 self?.interpreterPanel?.title = L.t("Data Inspector")
+                self?.searchPanel?.title = L.t("Search")
                 self?.searchProgressPanel?.title = L.t("Search")
             }
             .store(in: &cancellables)
@@ -49,6 +51,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             .removeDuplicates()
             .dropFirst()
             .sink { [weak self] searching in self?.setSearchProgressVisible(searching) }
+            .store(in: &cancellables)
+
+        // The find dialog lives in its own draggable palette rather than a
+        // modal sheet, so the hex view stays clickable while it is open.
+        state.$showSearch
+            .removeDuplicates()
+            .dropFirst()
+            .sink { [weak self] show in self?.setSearchPanelVisible(show) }
             .store(in: &cancellables)
 
         let root = ContentView().environmentObject(state)
@@ -114,6 +124,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     func windowWillClose(_ notification: Notification) {
         guard let closing = notification.object as? NSPanel else { return }
         if closing === interpreterPanel { state.showInspector = false }
+        if closing === searchPanel { state.showSearch = false }
     }
 
     /// Closing the search palette mid-scan asks for confirmation, like WinHex.
@@ -296,6 +307,47 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         panel.hidesOnDeactivate = false
         panel.delegate = self
         panel.contentView = NSHostingView(rootView: InterpreterPanelView().environmentObject(state))
+        return panel
+    }
+
+    // MARK: - Find dialog palette
+
+    /// Shows or hides the draggable, non-modal find dialog.
+    private func setSearchPanelVisible(_ show: Bool) {
+        if searchPanel == nil {
+            searchPanel = makeSearchPanel()
+        }
+        guard let panel = searchPanel else { return }
+
+        if show {
+            if !panel.isVisible {
+                if let main = window, main.isVisible {
+                    panel.setFrameTopLeftPoint(
+                        NSPoint(x: main.frame.midX - 300, y: main.frame.maxY - 80)
+                    )
+                }
+                panel.makeKeyAndOrderFront(nil)
+            }
+        } else {
+            panel.orderOut(nil)
+        }
+    }
+
+    private func makeSearchPanel() -> NSPanel {
+        let panel = NSPanel(
+            contentRect: NSRect(x: 0, y: 0, width: 600, height: 470),
+            styleMask: [.titled, .closable, .utilityWindow, .nonactivatingPanel],
+            backing: .buffered,
+            defer: false
+        )
+        panel.title = L.t("Search")
+        panel.isFloatingPanel = true
+        panel.level = .floating
+        panel.isReleasedWhenClosed = false
+        panel.hidesOnDeactivate = false
+        panel.isMovableByWindowBackground = true
+        panel.delegate = self
+        panel.contentView = NSHostingView(rootView: SearchView().environmentObject(state))
         return panel
     }
 

@@ -43,7 +43,6 @@ struct ContentView: View {
         }
         .frame(minWidth: 860, minHeight: 520)
         .sheet(isPresented: $state.showFind) { FindView() }
-        .sheet(isPresented: $state.showSearch) { SearchView() }
         .sheet(isPresented: $state.showGotoSector) { GotoSectorView() }
         .sheet(isPresented: $state.showGotoOffset) { GotoOffsetView() }
         .sheet(isPresented: $state.showFill) { FillView() }

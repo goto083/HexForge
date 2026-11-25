@@ -29,8 +29,18 @@ enum L10n {
     static var language: AppLanguage = .english
 
     private static let defaultsKey = "HexForge.Language"
+    /// One-time marker: 1.1.0 onward ships with an English interface.
+    private static let englishResetKey = "HexForge.LanguageReset.1_1_0"
 
     static func savedLanguage() -> AppLanguage {
+        // The interface language was switched to English for this release.
+        // Clear whatever was persisted earlier exactly once, so a manual
+        // choice made afterwards still sticks.
+        if !UserDefaults.standard.bool(forKey: englishResetKey) {
+            UserDefaults.standard.set(true, forKey: englishResetKey)
+            UserDefaults.standard.set(AppLanguage.english.rawValue, forKey: defaultsKey)
+            return .english
+        }
         guard let raw = UserDefaults.standard.string(forKey: defaultsKey),
               let saved = AppLanguage(rawValue: raw) else { return .english }
         return saved

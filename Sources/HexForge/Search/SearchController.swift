@@ -82,54 +82,123 @@ extension AppState {
             return
         }
 
-        var hit: Int?
-        var wrapped = false
-
+        // Search from the cursor first, then wrap around, exactly like before.
+        // Each segment is reported to the floating progress palette so a slow
+        // pass over a huge disk still shows a live sector number and percent.
+        var segments: [Range<Int>] = []
         if options.direction == .forward {
             let start = cursor + 1
             if start < range.upperBound {
-                hit = SearchEngine.findAll(pattern: pattern, document: document,
-                                           in: start..<range.upperBound,
-                                           options: options, limit: 1).first
-                if hit == nil, range.lowerBound < start {
-                    hit = SearchEngine.findAll(pattern: pattern, document: document,
-                                               in: range.lowerBound..<start,
-                                               options: options, limit: 1).first
-                    wrapped = hit != nil
-                }
+                segments = [start..<range.upperBound]
+                if range.lowerBound < start { segments.append(range.lowerBound..<start) }
             } else {
-                hit = SearchEngine.findAll(pattern: pattern, document: document,
-                                           in: range, options: options, limit: 1).first
-                wrapped = hit != nil
+                segments = [range]
             }
         } else {
             let end = max(range.lowerBound, min(cursor, range.upperBound))
             if range.lowerBound < end {
-                hit = SearchEngine.findLast(pattern: pattern, document: document,
-                                            in: range.lowerBound..<end, options: options)
-                if hit == nil, end + 1 < range.upperBound {
-                    hit = SearchEngine.findLast(pattern: pattern, document: document,
-                                                in: (end + 1)..<range.upperBound, options: options)
-                    wrapped = hit != nil
-                }
+                segments = [range.lowerBound..<end]
+                if end + 1 < range.upperBound { segments.append((end + 1)..<range.upperBound) }
             } else {
-                hit = SearchEngine.findLast(pattern: pattern, document: document,
-                                            in: range, options: options)
-                wrapped = hit != nil
+                segments = [range]
             }
         }
+        segments = segments.filter { $0.count >= pattern.count }
 
-        guard let offset = hit else {
+        guard !segments.isEmpty else {
             setSearchStatus(L.t("Not found"))
             return
         }
 
-        selectMatch(at: offset, length: pattern.count)
-        searchWrapped = wrapped
-        let hexOffset = String(offset, radix: 16).uppercased()
-        setSearchStatus(wrapped
-                        ? L.f("Match at 0x%@ (wrapped)", hexOffset)
-                        : L.f("Match at 0x%@", hexOffset))
+        let target = document
+        let progressState = searchProgressState
+        let totalBytes = Double(segments.reduce(0) { $0 + $1.count })
+        let reverse = options.direction == .backward
+
+        isSearching = true
+        searchCancelled = false
+        searchToken &+= 1
+        let token = searchToken
+        searchStatus = L.t("Searching…")
+        progressState.reset()
+        progressState.isSearching = true
+
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self = self else { return }
+            var found: Int?
+            var wrapped = false
+            var consumed = 0
+            var lastReport = Date.distantPast
+
+            for (index, segment) in segments.enumerated() {
+                if self.searchCancelled { break }
+
+                let report: (Double, Int, Int) -> Void = { fraction, scanned, _ in
+                    let now = Date()
+                    guard fraction >= 1 || now.timeIntervalSince(lastReport) >= 0.05 else { return }
+                    lastReport = now
+                    let overall = (Double(consumed) + fraction * Double(segment.count)) / totalBytes
+                    DispatchQueue.main.async {
+                        guard self.searchToken == token else { return }
+                        progressState.fraction = min(max(overall, 0), 1)
+                        progressState.scanOffset = scanned
+                        progressState.resultCount = found == nil ? 0 : 1
+                    }
+                }
+                let cancelled: () -> Bool = { self.searchCancelled }
+
+                if reverse {
+                    found = SearchEngine.findLast(pattern: pattern, document: target,
+                                                  in: segment, options: options,
+                                                  progress: report, isCancelled: cancelled)
+                } else {
+                    found = SearchEngine.findAll(pattern: pattern, document: target,
+                                                 in: segment, options: options, limit: 1,
+                                                 progress: report, isCancelled: cancelled).first
+                }
+
+                if found != nil {
+                    wrapped = index > 0
+                    break
+                }
+                consumed += segment.count
+            }
+
+            DispatchQueue.main.async {
+                guard self.searchToken == token else { return }
+                let wasCancelled = self.searchCancelled
+
+                self.isSearching = false
+                progressState.isSearching = false
+                progressState.fraction = 1
+                progressState.resultCount = found == nil ? 0 : 1
+
+                // WinHex behaviour: once the search is over the dialog steps
+                // aside and the hit is listed in the pane in the middle.
+                self.showSearch = false
+
+                guard let offset = found, !wasCancelled else {
+                    self.searchStatus = wasCancelled ? L.t("Search cancelled") : L.t("Not found")
+                    return
+                }
+
+                self.selectMatch(at: offset, length: pattern.count)
+                self.searchWrapped = wrapped
+
+                if !self.searchResults.contains(where: { $0.offset == offset }) {
+                    self.searchResults.append(SearchHit(offset: offset))
+                    self.searchResults.sort { $0.offset < $1.offset }
+                }
+                self.searchTotalFound = self.searchResults.count
+                self.showHitList = true
+                self.selectedHitOffset = offset
+
+                let hexOffset = String(offset, radix: 16).uppercased()
+                self.setSearchStatus(wrapped
+                                     ? L.f("Match at 0x%@ (wrapped)", hexOffset)
+                                     : L.f("Match at 0x%@", hexOffset))
+            }
+        }
     }
 
     // MARK: - Find all
