@@ -212,6 +212,9 @@ final class AppState: ObservableObject {
     @Published var searchTotalFound = 0
     @Published var isSearching = false
     @Published var searchProgress: Double = 0
+    /// Live progress for the floating search window (sector, percent, hits).
+    /// Separate object so per-tick updates don't redraw the whole main window.
+    let searchProgressState = SearchProgressState()
     @Published var searchStatus = ""
     /// True once a "find next" has wrapped around the end/start of the data.
     var searchWrapped = false

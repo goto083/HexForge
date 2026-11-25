@@ -66,15 +66,17 @@ enum SearchEngine {
     /// The document is walked in overlapping windows (`patternLength - 1` bytes
     /// of overlap) so matches that straddle a window boundary are still seen.
     /// `limit > 0` stops the scan as soon as that many hits have been recorded.
-    /// `progress` is called with a 0…1 fraction, and `isCancelled` is polled
-    /// between windows so a long scan can be aborted.
+    /// `progress` receives the 0…1 fraction, the absolute offset the scan has
+    /// reached, and how many hits have been recorded so far — the latter two
+    /// feed the WinHex-style progress window. `isCancelled` is polled between
+    /// windows so a long scan can be aborted.
     @discardableResult
     static func findAll(pattern: BytePattern,
                         document: HexDocument,
                         in range: Range<Int>,
                         options: SearchOptions,
                         limit: Int,
-                        progress: ((Double) -> Void)? = nil,
+                        progress: ((_ fraction: Double, _ scannedOffset: Int, _ hitCount: Int) -> Void)? = nil,
                         isCancelled: (() -> Bool)? = nil) -> [Int] {
         let length = pattern.count
         guard length > 0 else { return [] }
@@ -114,10 +116,10 @@ enum SearchEngine {
 
             if isFinalWindow { break }
             position += window
-            progress?(Double(position - low) / Double(span))
+            progress?(Double(position - low) / Double(span), position, results.count)
         }
 
-        progress?(1)
+        progress?(1, high, results.count)
         return results
     }
 

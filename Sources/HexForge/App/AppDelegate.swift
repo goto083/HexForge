@@ -7,6 +7,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     let state = AppState()
     private var window: NSWindow!
     private var interpreterPanel: NSPanel?
+    private var searchProgressPanel: NSPanel?
     private var cancellables: Set<AnyCancellable> = []
 
     // MARK: - Lifecycle
@@ -26,6 +27,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 L10n.language = language
                 self?.buildMenu()
                 self?.interpreterPanel?.title = L.t("Data Inspector")
+                self?.searchProgressPanel?.title = L.t("Search")
             }
             .store(in: &cancellables)
 
@@ -34,6 +36,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         state.$showInspector
             .dropFirst()
             .sink { [weak self] show in self?.setPanelVisible(\.interpreterPanel, show) }
+            .store(in: &cancellables)
+
+        // The search progress palette appears for as long as a scan runs; it is
+        // modeless, so the hex view below stays interactive and the palette can
+        // be dragged out of the way.
+        state.searchProgressState.$isSearching
+            .removeDuplicates()
+            .dropFirst()
+            .sink { [weak self] searching in self?.setSearchProgressVisible(searching) }
             .store(in: &cancellables)
 
         let root = ContentView().environmentObject(state)
@@ -65,6 +76,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     func windowWillClose(_ notification: Notification) {
         guard let closing = notification.object as? NSPanel else { return }
         if closing === interpreterPanel { state.showInspector = false }
+    }
+
+    /// Closing the search palette mid-scan asks for confirmation, like WinHex.
+    func windowShouldClose(_ sender: NSWindow) -> Bool {
+        guard sender === searchProgressPanel, state.isSearching else { return true }
+        let alert = NSAlert()
+        alert.messageText = L.t("Abandon search?")
+        alert.addButton(withTitle: L.t("Yes"))
+        alert.addButton(withTitle: L.t("No"))
+        if alert.runModal() == .alertFirstButtonReturn {
+            state.cancelSearch()
+            return true
+        }
+        return false
     }
 
     // MARK: - Menu construction
@@ -131,6 +156,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         editMenu.addItem(.separator())
         editMenu.addItem(item(L.t("Search…"), #selector(showSearch(_:)), "f", [.command]))
         editMenu.addItem(item(L.t("Find & Replace…"), #selector(showFind(_:)), "f", [.command, .option]))
+        editMenu.addItem(item(L.t("Toggle Search Results"), #selector(toggleSearchResults(_:)), "m", [.control]))
         editMenu.addItem(item(L.t("Goto Sector…"), #selector(showGotoSector(_:)), "g", [.control]))
         editMenu.addItem(item(L.t("Goto Offset…"), #selector(showGotoOffset(_:)), "g", [.option]))
         editMenu.addItem(item(L.t("Fill Selection…"), #selector(showFill(_:)), "f", [.command, .shift]))
@@ -235,6 +261,54 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         return panel
     }
 
+    // MARK: - Search progress palette
+
+    /// Shows or hides the modeless progress window used by "Find All".
+    private func setSearchProgressVisible(_ show: Bool) {
+        if searchProgressPanel == nil {
+            searchProgressPanel = makeSearchProgressPanel()
+        }
+        guard let panel = searchProgressPanel else { return }
+
+        if show {
+            if !panel.isVisible {
+                if let main = window, main.isVisible {
+                    // Drop it just below the title bar so it clears the find
+                    // dialog but does not cover the hex view.
+                    panel.setFrameTopLeftPoint(
+                        NSPoint(x: main.frame.midX - 220, y: main.frame.maxY - 160)
+                    )
+                }
+                panel.orderFront(nil)
+            }
+        } else {
+            panel.orderOut(nil)
+        }
+    }
+
+    private func makeSearchProgressPanel() -> NSPanel {
+        let panel = NSPanel(
+            contentRect: NSRect(x: 0, y: 0, width: 440, height: 112),
+            styleMask: [.titled, .closable, .utilityWindow, .nonactivatingPanel],
+            backing: .buffered,
+            defer: false
+        )
+        panel.title = L.t("Search")
+        panel.isFloatingPanel = true
+        panel.level = .floating
+        panel.isReleasedWhenClosed = false
+        panel.hidesOnDeactivate = false
+        // Whole background acts as a drag handle, so the bar can be pulled
+        // aside while a long scan keeps running.
+        panel.isMovableByWindowBackground = true
+        panel.delegate = self
+        panel.contentView = NSHostingView(
+            rootView: SearchProgressView(progress: state.searchProgressState)
+                .environmentObject(state)
+        )
+        return panel
+    }
+
     // MARK: - Actions
 
     @objc private func changeLanguage(_ sender: NSMenuItem) {
@@ -253,6 +327,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     @objc private func redoEdit(_ sender: Any?) { state.redo() }
 
     @objc private func showSearch(_ sender: Any?) { state.openSearch() }
+    @objc private func toggleSearchResults(_ sender: Any?) { state.toggleSearchResults() }
     @objc private func showFind(_ sender: Any?) { state.showFind = true }
     @objc private func showGotoSector(_ sender: Any?) { state.showGotoSector = true }
     @objc private func showGotoOffset(_ sender: Any?) { state.showGotoOffset = true }

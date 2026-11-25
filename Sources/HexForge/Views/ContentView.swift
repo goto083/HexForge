@@ -22,14 +22,16 @@ struct ContentView: View {
             VStack(spacing: 0) {
                 TopBarView()
                 Divider()
-                if state.showFileSystem {
-                    FileSystemView(browser: state.fsBrowser)
-                        .frame(height: 260)
-                    Divider()
-                }
+                // The docked pane above the hex view shows either the file
+                // system browser or the search hits — never both. Ctrl+M
+                // flips between the two, like WinHex's position manager.
                 if state.showHitList && !state.searchResults.isEmpty {
                     SearchResultsView()
                         .frame(height: 200)
+                    Divider()
+                } else if state.showFileSystem {
+                    FileSystemView(browser: state.fsBrowser)
+                        .frame(height: 260)
                     Divider()
                 }
                 HexEditorView()
